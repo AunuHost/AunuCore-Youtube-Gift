@@ -282,7 +282,9 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
   window.__AUNUCORE_YT_GIFT__ = {
     buildName: BUILD_NAME,
     phaseTestNumber: PHASE_TEST_NUMBER,
-    nextPhaseName: nextPhaseTestName(PHASE_TEST_NUMBER),
+    // SENGAJA tidak ada nextPhaseName di sini: field itu dulu berisi
+    // "phase test #2" dan membuat console seolah build ini sudah
+    // phase 2, padahal buildName/phaseTestNumber-nya masih #1.
   };
 
   installFetchInterceptor({
