@@ -11,7 +11,7 @@
       "run_at": "document_start"
     }
   ],
-  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #3: keyless Tenor search via service worker (Tenor site keys) + GIF picker.",
+  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #4: selected Tenor GIF is attached as tenorId with automatic retries against intermittent 400 blocks; keyless Tenor search via service worker.",
   "host_permissions": [
     "*://www.youtube.com/*",
     "*://media.tenor.com/*",
@@ -20,8 +20,8 @@
     "*://tenor.googleapis.com/*"
   ],
   "manifest_version": 3,
-  "name": "AunuCore youtube gift (phase test #3)",
-  "version": "0.3.0",
+  "name": "AunuCore youtube gift (phase test #4)",
+  "version": "0.4.0",
   "permissions": [
     "storage",
     "scripting"

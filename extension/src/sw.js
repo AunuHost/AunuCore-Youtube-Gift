@@ -1,5 +1,5 @@
 /**
- * AunuCore youtube gift (phase test #3) — Tenor service worker
+ * AunuCore youtube gift (phase test #4) — Tenor service worker
  * ============================================================
  * Satu-satunya bagian ekstensi yang bicara ke Tenor, meniru pola
  * yang dipakai ekstensi desktop_gifs (rayytor):

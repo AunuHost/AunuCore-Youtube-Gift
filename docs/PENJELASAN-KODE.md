@@ -148,3 +148,13 @@ perubahan, optimisasi per versi. RELEASES = aturan main rilis.
 | Key mati/ditolak | — | Dibuang, panen ulang otomatis, retry sekali |
 | API Tenor gagal | Pencarian gagal | Fallback ke data store-cache halaman Tenor |
 | Test | 17 | 26 |
+
+## Apa yang berubah di phase test #4
+
+| Aspek | Phase test #3 | Phase test #4 |
+|---|---|---|
+| GIF terpilih | jadi *pending* saja; komentar terkirim sebagai teks | dipasang sebagai `tenorId` pada payload `create_comment`/`create_comment_reply` |
+| Penolakan 400 | tidak ditangani | dinilai (`classifyCommentResponse`) dan di-retry sampai 12x bila kind-nya `blocked` |
+| Umpan balik | tidak ada | event `aunucore:gif-post-result` → status panel (`messageForPostResult`) |
+| Pending GIF | tanpa batas waktu | TTL 3 menit; dibersihkan hanya bila `posted`/`gif` |
+| Kode lama | `stripTenorDeep`, `buildImageAttachment`, stub WebP | dihapus — premis upload WebP gugur setelah studi source desktop_gifs |

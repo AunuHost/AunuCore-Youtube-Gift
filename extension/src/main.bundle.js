@@ -4,7 +4,7 @@
 (() => {
 "use strict";
 /**
- * AunuCore youtube gift (phase test #3) — GIF button + picker
+ * AunuCore youtube gift (phase test #4) — GIF button + picker
  * ============================================================
  * File ini menambah UI yang tidak ada di phase test #1:
  * 1) Tombol "GIF" yang disisipkan ke kotak komentar YouTube desktop
@@ -167,7 +167,26 @@ async function searchGifs({ q, apiKey, fetchImpl, bridgeSearch } = {}) {
 // ---------------------------------------------------------------------------
 
 function createPickerState() {
-  return { selected: null, isOpen: false, lastQuery: "", results: [] };
+  return { selected: null, isOpen: false, lastQuery: "", results: [], lastPostResult: null };
+}
+
+/** Ubah putusan interceptor (phase test #4) menjadi teks status panel. */
+function messageForPostResult(detail) {
+  if (!detail) return "";
+  switch (detail.kind) {
+    case "posted":
+      return "GIF berhasil terkirim sebagai lampiran komentar.";
+    case "blocked":
+      return `YouTube menolak komentar GIF dari desktop setelah ${detail.tries ?? "?"} percobaan — tidak ada yang terkirim. GIF-nya bukan penyebabnya; coba lagi nanti atau pakai aplikasi YouTube di HP.`;
+    case "gif":
+      return "YouTube menolak GIF ini (kemungkinan bukan rating G / tidak dikenal). Pilih GIF lain.";
+    case "rejected":
+      return `YouTube menolak komentar ini (HTTP ${detail.httpStatus ?? "?"}). Tidak ada yang terkirim.`;
+    case "network":
+      return "Koneksi gagal saat mengirim — tidak ada yang terkirim.";
+    default:
+      return "YouTube tidak memberi konfirmasi jelas. Cek daftar komentar sebelum mencoba lagi.";
+  }
 }
 
 const pickerState = createPickerState();
@@ -270,7 +289,7 @@ function buildPanel(doc, win, logger) {
   panel.id = PANEL_ID;
 
   const head = el("div", "ac-head");
-  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #3)"), actBtn("close", "Tutup"));
+  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #4)"), actBtn("close", "Tutup"));
 
   const rowSearch = el("div", "ac-row");
   rowSearch.append(field("query", "Cari GIF (Tenor)… lalu Enter"), actBtn("search", "Cari"));
@@ -307,7 +326,7 @@ function buildPanel(doc, win, logger) {
     label.append(
       doc.createTextNode("GIF terpilih: "),
       bold,
-      doc.createTextNode(" — tercatat sebagai pending GIF. Lampiran aktif di phase test #4."),
+      doc.createTextNode(" — akan terlampir sebagai GIF Tenor saat komentar diposting."),
     );
     const clearBtn = doc.createElement("button");
     clearBtn.type = "button";
@@ -327,7 +346,7 @@ function buildPanel(doc, win, logger) {
     win.dispatchEvent(new win.CustomEvent("aunucore:gif-selected", { detail: gif }));
     status.textContent = `Terpilih: ${gif.title}`;
     renderSelected();
-    logger.info?.(`[AunuCore youtube gift (phase test #3)] GIF terpilih`, gif);
+    logger.info?.(`[AunuCore youtube gift (phase test #4)] GIF terpilih`, gif);
   };
 
   const renderResults = (gifs) => {
@@ -399,7 +418,7 @@ function ensureGifButton(commentBox, { doc, win, logger = console } = {}) {
   btn.className = "aunucore-gif-btn";
   btn.setAttribute(BUTTON_MARK, "1");
   btn.textContent = "GIF";
-  btn.title = "AunuCore youtube gift (phase test #3) — pilih GIF";
+  btn.title = "AunuCore youtube gift (phase test #4) — pilih GIF";
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -430,8 +449,19 @@ function initGifPicker({ win = window, doc = document, logger = console } = {}) 
   scanAndInjectButtons({ doc, logger });
   const observer = new win.MutationObserver(() => scanAndInjectButtons({ doc, logger }));
   observer.observe(doc.documentElement, { childList: true, subtree: true });
-  logger.info?.("[AunuCore youtube gift (phase test #3)] tombol GIF + picker aktif");
-  return () => observer.disconnect();
+  // Hasil akhir pengiriman komentar GIF dari interceptor (main.js):
+  // simpan di state dan tampilkan di panel bila sedang terbuka.
+  const onPostResult = (e) => {
+    pickerState.lastPostResult = e.detail ?? null;
+    const status = doc.querySelector(`#${PANEL_ID} [data-ac="status"]`);
+    if (status) status.textContent = messageForPostResult(e.detail);
+  };
+  win.addEventListener("aunucore:gif-post-result", onPostResult);
+  logger.info?.("[AunuCore youtube gift (phase test #4)] tombol GIF + picker aktif");
+  return () => {
+    observer.disconnect();
+    win.removeEventListener("aunucore:gif-post-result", onPostResult);
+  };
 }
 
 /**
@@ -448,14 +478,22 @@ function initGifPicker({ win = window, doc = document, logger = console } = {}) 
  *   Nama ini TIDAK disuntikkan ke payload YouTube (field asing di
  *   payload berisiko memicu 400 INVALID_ARGUMENT lagi).
  *
- * CATATAN ISSUE #93:
- * - Sejak 14 Okt 2026, `tenorId` di /comment/create_comment -> 400.
- * - File ini menghapus tenorId secara rekursif, lalu mengisi
- *   `imageAttachment.encryptedBlobId` HANYA jika blob id itu berasal
- *   dari response upload gambar YouTube yang nyata.
- * - encryptedBlobId TIDAK bisa dibuat/ditebak di client. Mengisi
- *   nilai palsu/mock ke request live tetap akan ditolak server.
- * - Mock hanya dipakai di unit test (main.test.js).
+ * CATATAN ISSUE #93 (diperbarui di phase test #4):
+ * - Sejak 14 Okt 2026, `tenorId` di /comment/create_comment sering
+ *   ditolak 400 INVALID_ARGUMENT — tetapi TIDAK selalu: pengukuran
+ *   ekstensi referensi desktop_gifs (rayytor), yang source-nya
+ *   dipelajari untuk phase ini, menunjukkan penolakan itu tidak
+ *   konsisten dan bergantung wilayah koneksi.
+ * - Jalur lama phase #1–#3 (buang tenorId + isi
+ *   imageAttachment.encryptedBlobId dari upload WebP) DIBUANG:
+ *   tidak ada implementasi referensi yang memakainya, dan
+ *   encryptedBlobId tidak bisa dibuat/ditebak di client.
+ * - Phase #4 memakai jalur yang terbukti: pasang tenorId dari GIF
+ *   terpilih, lalu coba ulang request yang ditolak "blocked"
+ *   sampai 12x (~30 detik). Request yang ditolak tidak memposting
+ *   apa pun, jadi retry tidak bisa memposting dobel.
+ * - Semua GIF dari pencarian kita berating G (contentfilter=high
+ *   di service worker) — syarat agar retry layak dilakukan.
  * ============================================================
  */
 
@@ -464,7 +502,7 @@ function initGifPicker({ win = window, doc = document, logger = console } = {}) 
 // 1. Identitas build / penamaan percobaan
 // ---------------------------------------------------------------------------
 
-const PHASE_TEST_NUMBER = 3;
+const PHASE_TEST_NUMBER = 4;
 const BUILD_NAME_BASE = "AunuCore youtube gift";
 
 function makePhaseTestName(phase = PHASE_TEST_NUMBER) {
@@ -509,20 +547,6 @@ function getRequestMethod(input, init = {}) {
 // 3. Transformer payload (PURE - aman diuji dengan node --test)
 // ---------------------------------------------------------------------------
 
-function stripTenorDeep(node) {
-  if (Array.isArray(node)) {
-    for (const item of node) stripTenorDeep(item);
-    return node;
-  }
-  if (node && typeof node === "object") {
-    delete node.tenorId;
-    delete node.tenorAttachment;
-    delete node.tenor_attachment;
-    for (const value of Object.values(node)) stripTenorDeep(value);
-  }
-  return node;
-}
-
 function extractTenorId(payload) {
   if (!payload || typeof payload !== "object") return undefined;
   if (typeof payload.tenorId === "string" && payload.tenorId) return payload.tenorId;
@@ -535,97 +559,154 @@ function extractTenorId(payload) {
   return undefined;
 }
 
-function buildImageAttachment({ encryptedBlobId } = {}) {
-  if (!encryptedBlobId || typeof encryptedBlobId !== "string") return null;
-  return { encryptedBlobId };
+/** ID GIF Tenor yang sah untuk tenorId: string digit (id post Tenor). */
+function isTenorPostId(id) {
+  return typeof id === "string" && /^\d{1,20}$/.test(id);
 }
 
-/** Contoh payload SEBELUM (yang diblokir) — untuk dokumentasi/test. */
+/**
+ * Pasang GIF terpilih ke payload sebagai tenorId (phase test #4).
+ * Mengembalikan { payload, armed } — armed=false bila GIF bukan dari
+ * Tenor (mis. mode tempel URL langsung): GIF seperti itu tidak punya
+ * id Tenor dan tidak bisa dilampirkan lewat jalur ini.
+ * Payload asli tidak dimutasi.
+ */
+function applyGifToPayload(payload, gif) {
+  if (!payload || typeof payload !== "object") return { payload, armed: false };
+  const next =
+    typeof structuredClone === "function"
+      ? structuredClone(payload)
+      : JSON.parse(JSON.stringify(payload));
+  if (!isTenorPostId(gif?.id)) return { payload: next, armed: false };
+  next.tenorId = String(gif.id);
+  return { payload: next, armed: true };
+}
+
+/** Alias transformasi phase #4 (nama lama dipertahankan untuk test lama). */
+function transformCreateCommentPayload(payload, { pendingGif } = {}) {
+  return applyGifToPayload(payload, pendingGif).payload;
+}
+
+/** Contoh payload SEBELUM GIF dipilih — komentar teks biasa. */
 function mockPayloadBefore() {
   return {
     context: { client: { clientName: "WEB", clientVersion: "2.20261014" } },
     commentText: "test gif",
     createCommentParams: "Eg0SCw...",
-    tenorId: "15160261",
   };
 }
 
-/** Contoh payload SESUDAH (mock) — encryptedBlobId mock HANYA untuk test. */
+/** Contoh payload SESUDAH GIF Tenor dipilih — tenorId terpasang. */
 function mockPayloadAfter() {
   return {
     context: { client: { clientName: "WEB", clientVersion: "2.20261014" } },
     commentText: "test gif",
     createCommentParams: "Eg0SCw...",
-    imageAttachment: {
-      encryptedBlobId: "MOCK_BLOB_ID_FROM_REAL_UPLOAD_RESPONSE",
-    },
+    tenorId: "13710736021070431175",
   };
-}
-
-/**
- * Transformasi utama:
- * 1) clone payload (payload asli tidak dimutasi)
- * 2) hapus tenorId di semua level nesting
- * 3) isi imageAttachment hanya bila encryptedBlobId valid tersedia
- */
-function transformCreateCommentPayload(payload, { encryptedBlobId } = {}) {
-  if (!payload || typeof payload !== "object") return payload;
-
-  const next =
-    typeof structuredClone === "function"
-      ? structuredClone(payload)
-      : JSON.parse(JSON.stringify(payload));
-
-  stripTenorDeep(next);
-
-  const attachment = buildImageAttachment({ encryptedBlobId });
-  if (attachment) next.imageAttachment = attachment;
-
-  return next;
 }
 
 // ---------------------------------------------------------------------------
 // 3b. Pending GIF — GIF yang dipilih dari picker (phase test #2)
 // ---------------------------------------------------------------------------
 
+/** Pending GIF kedaluwarsa 3 menit agar tidak menempel ke komentar lain. */
+const PENDING_TTL_MS = 3 * 60 * 1000;
+
 let pendingGif = null;
+let pendingArmedAt = 0;
 
-function setPendingGif(gif) {
+function setPendingGif(gif, nowMs = Date.now()) {
   pendingGif = gif?.gifUrl ? gif : null;
+  pendingArmedAt = pendingGif ? nowMs : 0;
   return pendingGif;
 }
 
-function getPendingGif() {
-  return pendingGif;
-}
-
-// ---------------------------------------------------------------------------
-// 4. Ambil GIF Tenor -> animated WebP (encoder di-inject, bukan rename ekstensi)
-// ---------------------------------------------------------------------------
-
-async function fetchTenorAsWebpBlob(
-  tenorUrl,
-  { fetchImpl, convertGifToAnimatedWebp } = {},
-) {
-  if (!tenorUrl) throw new Error(`${LOG_PREFIX} tenorUrl kosong`);
-  if (typeof convertGifToAnimatedWebp !== "function") {
-    throw new Error(
-      `${LOG_PREFIX} convertGifToAnimatedWebp belum dipasang ` +
-        `(perlu encoder animated WebP asli, mis. libwebp WASM — ` +
-        `mengganti ekstensi/type saja akan gagal validasi server)`,
-    );
+function getPendingGif(nowMs = Date.now()) {
+  if (pendingGif && nowMs - pendingArmedAt > PENDING_TTL_MS) {
+    pendingGif = null;
+    pendingArmedAt = 0;
   }
-  const doFetch = fetchImpl ?? globalThis.fetch;
-  if (typeof doFetch !== "function") throw new Error(`${LOG_PREFIX} fetch tidak tersedia`);
-
-  const res = await doFetch(tenorUrl);
-  if (!res?.ok) throw new Error(`${LOG_PREFIX} Tenor fetch gagal: HTTP ${res?.status ?? "?"}`);
-
-  const gifBlob = await res.blob();
-  const webpBlob = await convertGifToAnimatedWebp(gifBlob);
-  if (!webpBlob) throw new Error(`${LOG_PREFIX} konversi ke animated WebP menghasilkan blob kosong`);
-  return webpBlob;
+  return pendingGif;
 }
+
+// ---------------------------------------------------------------------------
+// 4. Penilaian respons create_comment + jadwal retry (PURE, untuk test)
+// ---------------------------------------------------------------------------
+// kind:
+//   posted    komentar benar-benar terbit (actionResult STATUS_SUCCEEDED)
+//   blocked   400 INVALID_ARGUMENT — GIF diterima bentuknya, komentar
+//             ditolak; satu-satunya kind yang layak di-retry
+//   gif       HTTP 200 tetapi ada showErrorAction: YouTube memeriksa
+//             GIF-nya dan menolaknya (id tak dikenal / bukan rating G)
+//   rejected  penolakan lain; tidak ada yang terbit
+//   uncertain tidak ada konfirmasi yang bisa dibaca
+
+const RETRY_DELAYS_MS = [1000, 1500, 2000, 2000, 2500, 2500, 3000, 3000, 3000, 3000, 3000];
+const MAX_TRIES = RETRY_DELAYS_MS.length + 1;
+
+function textOfValue(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  if (typeof value.simpleText === "string") return value.simpleText;
+  if (typeof value.content === "string") return value.content;
+  if (Array.isArray(value.runs)) {
+    return value.runs.map((r) => (typeof r?.text === "string" ? r.text : "")).join("");
+  }
+  return "";
+}
+
+/** Kumpulkan pesan dari semua showErrorAction (termasuk yang bersarang). */
+function collectShowErrorMessages(node, out = [], depth = 0) {
+  if (!node || typeof node !== "object" || depth > 8) return out;
+  if (Array.isArray(node)) {
+    for (const item of node) collectShowErrorMessages(item, out, depth + 1);
+    return out;
+  }
+  if (node.showErrorAction) {
+    const err = node.showErrorAction.errorMessage;
+    const text = textOfValue(err?.messageRenderer?.text) || textOfValue(err);
+    if (text) out.push(text);
+  }
+  for (const value of Object.values(node)) collectShowErrorMessages(value, out, depth + 1);
+  return out;
+}
+
+function classifyCommentResponse({ httpStatus, json } = {}) {
+  const apiStatus = typeof json?.error?.status === "string" ? json.error.status : null;
+  const actionStatus = typeof json?.actionResult?.status === "string" ? json.actionResult.status : null;
+  const errors = json ? collectShowErrorMessages(json) : [];
+  const message = [...new Set([
+    textOfValue(json?.error?.message),
+    ...errors,
+    textOfValue(json?.actionResult?.feedbackText),
+  ].filter(Boolean))].join(" ");
+
+  const kind =
+    httpStatus >= 200 && httpStatus < 300 && actionStatus === "STATUS_SUCCEEDED" && errors.length === 0
+      ? "posted"
+      : httpStatus === 400 && apiStatus === "INVALID_ARGUMENT"
+        ? "blocked"
+        : errors.length > 0
+          ? "gif"
+          : httpStatus >= 400
+            ? "rejected"
+            : "uncertain";
+
+  return { kind, httpStatus, apiStatus, actionStatus, message };
+}
+
+async function judgeCommentResponse(response) {
+  let json = null;
+  try {
+    json = await response.clone().json();
+  } catch {
+    /* respons tidak terbaca -> tidak mengonfirmasi apa pun */
+  }
+  return classifyCommentResponse({ httpStatus: response?.status ?? 0, json });
+}
+
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
 // 5. Fetch interceptor (side-effect browser saja)
@@ -633,14 +714,11 @@ async function fetchTenorAsWebpBlob(
 
 /**
  * @param {object} deps
- * @param {Function} [deps.resolveEncryptedBlobId]
- *   Fungsi milikmu yang WAJIB melakukan flow nyata:
- *   fetch Tenor -> encode animated WebP -> upload via flow upload
- *   gambar YouTube -> kembalikan encryptedBlobId dari response upload.
- *   Jika mengembalikan undefined, request dikirim sebagai komentar
- *   teks biasa (tanpa tenorId, tanpa attachment palsu).
- * @param {Function} [deps.fetchImpl]  fetch asli (untuk test/injeksi)
- * @param {object}   [deps.logger]     default: console
+ * @param {Function} [deps.fetchImpl]     fetch asli (untuk test/injeksi)
+ * @param {object}   [deps.logger]        default: console
+ * @param {Function} [deps.sleep]         penunda antar-retry (test: instan)
+ * @param {number[]} [deps.retryDelaysMs] jadwal retry (default RETRY_DELAYS_MS)
+ * @param {Function} [deps.onResult]      callback hasil akhir komentar GIF
  * @returns {Function} uninstall()
  */
 function installFetchInterceptor(deps = {}) {
@@ -649,7 +727,24 @@ function installFetchInterceptor(deps = {}) {
   if (typeof originalFetch !== "function") return () => {};
 
   const logger = deps.logger ?? console;
-  const resolveEncryptedBlobId = deps.resolveEncryptedBlobId;
+  const sleep = deps.sleep ?? defaultSleep;
+  const delays = deps.retryDelaysMs ?? RETRY_DELAYS_MS;
+
+  const emitResult = (detail) => {
+    if (typeof deps.onResult === "function") {
+      try { deps.onResult(detail); } catch { /* abaikan */ }
+    }
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+      try {
+        window.dispatchEvent(new window.CustomEvent("aunucore:gif-post-result", { detail }));
+      } catch { /* abaikan */ }
+    }
+    if (detail.kind !== "posted") {
+      // Cukup untuk membedakan kasus di laporan bug — tanpa teks
+      // komentar, header, atau kredensial apa pun.
+      logger.warn?.(`${LOG_PREFIX} komentar GIF tidak terkonfirmasi`, JSON.stringify(detail));
+    }
+  };
 
   const interceptedFetch = async (input, init = {}) => {
     const url = getRequestUrl(input);
@@ -683,45 +778,61 @@ function installFetchInterceptor(deps = {}) {
       return originalFetch(input, init); // bukan JSON -> jangan sentuh
     }
 
-    const tenorId = extractTenorId(parsed);
     const pending = getPendingGif();
-    if (!tenorId && !pending && !("imageAttachment" in parsed)) {
+    const ownTenorId = extractTenorId(parsed);
+    if (!pending && !ownTenorId) {
       return originalFetch(input, init); // bukan komentar GIF -> lolos apa adanya
     }
 
-    let encryptedBlobId;
-    if ((tenorId || pending) && typeof resolveEncryptedBlobId === "function") {
-      try {
-        encryptedBlobId = await resolveEncryptedBlobId({
-          tenorId,
-          pendingGif: pending,
-          buildName: BUILD_NAME,
-          originalPayload: parsed,
-        });
-      } catch (err) {
-        logger.warn?.(`${LOG_PREFIX} resolver gagal, kirim tanpa attachment:`, err);
-      }
+    const { payload: nextPayload, armed } = applyGifToPayload(parsed, pending);
+    if (pending && !armed) {
+      // GIF dari mode tempel URL langsung: tidak punya id Tenor.
+      logger.info?.(`${LOG_PREFIX} GIF non-Tenor tidak bisa dilampirkan; komentar dikirim sebagai teks`);
+      return originalFetch(input, init);
     }
 
-    const nextPayload = transformCreateCommentPayload(parsed, { encryptedBlobId });
     const nextBody = JSON.stringify(nextPayload);
-    logger.debug?.(`${LOG_PREFIX} payload ditransformasi`, {
-      tenorIdRemoved: tenorId !== undefined,
-      hasImageAttachment: Boolean(nextPayload.imageAttachment),
-      pendingGifUrl: pending?.gifUrl ?? null,
+    const isRequestInput = Boolean(
+      requestClone || (input && typeof input.clone === "function" && typeof init.body !== "string"),
+    );
+    const sendOnce = () =>
+      isRequestInput
+        ? originalFetch(new Request(input, { ...init, body: nextBody, method: "POST" }))
+        : originalFetch(input, { ...init, body: nextBody });
+
+    const tries = delays.length + 1;
+    let attempt = 0;
+    let response;
+    let verdict;
+
+    for (;;) {
+      attempt++;
+      try {
+        response = await sendOnce();
+      } catch (err) {
+        emitResult({ ok: false, kind: "network", tries: attempt, tenorId: nextPayload.tenorId ?? null });
+        throw err;
+      }
+      verdict = await judgeCommentResponse(response);
+      if (verdict.kind !== "blocked" || attempt === tries) break;
+      logger.info?.(`${LOG_PREFIX} YouTube menolak (blocked), mencoba lagi ${attempt + 1}/${tries}…`);
+      await sleep(delays[attempt - 1]);
+    }
+
+    emitResult({
+      ok: verdict.kind === "posted",
+      kind: verdict.kind,
+      tries: attempt,
+      httpStatus: verdict.httpStatus,
+      apiStatus: verdict.apiStatus,
+      message: verdict.message,
+      tenorId: nextPayload.tenorId ?? null,
     });
 
-    // Kasus input berupa Request: buat Request baru dengan body baru.
-    let response;
-    if (requestClone || (input && typeof input.clone === "function" && typeof init.body !== "string")) {
-      const newRequest = new Request(input, { ...init, body: nextBody, method: "POST" });
-      response = await originalFetch(newRequest);
-    } else {
-      response = await originalFetch(input, { ...init, body: nextBody });
-    }
-
-    // Pending GIF terpakai untuk komentar ini — bersihkan bila terkirim.
-    if (response?.ok && pending) {
+    // Pending dibersihkan hanya bila GIF-nya selesai urusannya:
+    // terkirim, atau GIF-nya sendiri yang ditolak. Bila "blocked",
+    // pending dipertahankan (dalam TTL) agar user bisa mencoba lagi.
+    if (pending && (verdict.kind === "posted" || verdict.kind === "gif")) {
       setPendingGif(null);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new window.CustomEvent("aunucore:gif-cleared", { detail: null }));
@@ -764,13 +875,9 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
     console.warn(`${LOG_PREFIX} picker gagal dipasang:`, err);
   }
 
-  installFetchInterceptor({
-    // TODO(phase test #4): ganti resolver ini dengan flow upload nyata.
-    // Di phase test #3 ia tetap mengembalikan undefined: yang baru di
-    // phase ini adalah pencarian Tenor tanpa API key pribadi lewat
-    // service worker (sw.js). Attachment belum dikirim sampai #4.
-    resolveEncryptedBlobId: async () => undefined,
-  });
+  // Phase test #4: interceptor memasang tenorId GIF terpilih dan
+  // me-retry penolakan "blocked" sampai 12x (lihat RETRY_DELAYS_MS).
+  installFetchInterceptor({});
 
   console.info(`${LOG_PREFIX} interceptor aktif di`, location.href);
 }

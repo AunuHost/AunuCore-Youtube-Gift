@@ -1,4 +1,4 @@
-// AunuCore youtube gift (phase test #3) - loader
+// AunuCore youtube gift (phase test #4) - loader
 // Content script (isolated world). Tugasnya hanya meminta service
 // worker menyuntikkan main.bundle.js ke MAIN world lewat
 // chrome.scripting.executeScript.
@@ -9,7 +9,7 @@
 // match". File yang disuntikkan chrome.scripting bukan muatan
 // halaman, jadi tidak terkena penolakan tersebut.
 (() => {
-  const BUILD_NAME = "AunuCore youtube gift (phase test #3)";
+  const BUILD_NAME = "AunuCore youtube gift (phase test #4)";
   try {
     chrome.runtime.sendMessage({ type: "aunucore:inject-main" }).then(
       (res) => {

@@ -2,7 +2,7 @@
 
 Desktop GIFs experiment for YouTube desktop comments — workaround research for issue #93.
 
-**Current build: AunuCore youtube gift (phase test #3)**
+**Current build: AunuCore youtube gift (phase test #4)**
 
 Since 14 October 2026, YouTube rejects the `tenorId` field on desktop
 `comment/create_comment` requests with `400 INVALID_ARGUMENT`.
@@ -70,10 +70,13 @@ See `docs/RELEASES.md` and `CHANGELOG.md`.
      `.webp` link and click **Pakai URL**.
 4. The chosen GIF is shown in the panel and stored as the *pending
    GIF* (check `window.__AUNUCORE_YT_GIFT__.getPendingGif()`).
-   When you post the comment, the interceptor sees the pending GIF
-   and consumes it. **The image attachment itself activates in
-   phase test #4** (upload resolver) — until then the comment is
-   still posted as text.
+   When you post the comment, the interceptor attaches the GIF as
+   `tenorId` and, if YouTube answers 400 INVALID_ARGUMENT
+   ("blocked"), retries the same request up to 12 times over
+   ~30 seconds — a blocked request posts nothing, so retries can
+   never double-post. The panel reports the verdict (posted /
+   blocked / GIF refused). Direct-URL GIFs have no Tenor id and
+   are posted as plain text.
 
 ## Load in Chrome (unpacked)
 
@@ -92,13 +95,17 @@ node --test extension/src/*.test.js
 node tools/build-bundle.mjs   # rebuild bundle after editing picker.js / main.js
 ```
 
-Phase test #1 verified: `tenorId` is stripped and the request no
-longer fails because of it. Phase test #2 adds the GIF button +
-picker and the pending-GIF wiring. Phase test #3 makes Tenor
-search work without a personal API key (service worker reads the
-keys tenor.com serves its own scripts). The upload resolver
-(`resolveEncryptedBlobId`) intentionally returns `undefined` until
-the real image-upload flow is captured and implemented in phase #4.
+Phase test #1 verified: the interceptor can rewrite comment
+payloads. Phase test #2 adds the GIF button + picker and the
+pending-GIF wiring. Phase test #3 makes Tenor search work without
+a personal API key (service worker reads the keys tenor.com
+serves its own scripts). Phase test #4 attaches the GIF for real:
+studying the reference extension (rayytor/desktop_gifs) showed
+the working approach is `tenorId` + persistent retries against
+the intermittent post-14-October blocks — the WebP upload /
+`encryptedBlobId` route from the original plan was dropped
+because no working implementation of it exists. Live result from
+the maintainer's network is the remaining unknown.
 
 ---
 By AunuCore — AunuHost

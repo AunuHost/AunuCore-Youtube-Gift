@@ -1,5 +1,5 @@
 /**
- * Test picker untuk: AunuCore youtube gift (phase test #3)
+ * Test picker untuk: AunuCore youtube gift (phase test #4)
  * Jalankan: node --test extension/src/picker.test.js
  */
 import { test } from "node:test";
@@ -115,4 +115,14 @@ test("searchGifs memakai API key pribadi sebagai override langsung", async () =>
   });
   const out = await searchGifs({ q: "langsung", apiKey: "KEY_PRIBADI", fetchImpl: fakeFetch });
   assert.equal(out[0].id, "5");
+});
+
+test("state picker punya lastPostResult dan pesan hasil posting sesuai kind", async () => {
+  const { createPickerState, messageForPostResult } = await import("./picker.js");
+  assert.equal(createPickerState().lastPostResult, null);
+  assert.match(messageForPostResult({ kind: "posted" }), /berhasil terkirim/);
+  assert.match(messageForPostResult({ kind: "blocked", tries: 12 }), /12 percobaan/);
+  assert.match(messageForPostResult({ kind: "gif" }), /Pilih GIF lain/);
+  assert.match(messageForPostResult({ kind: "rejected", httpStatus: 403 }), /HTTP 403/);
+  assert.equal(messageForPostResult(null), "");
 });
