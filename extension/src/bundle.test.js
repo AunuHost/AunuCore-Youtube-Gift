@@ -22,6 +22,11 @@ test("bundle: gabungan picker+main tanpa sisa import/export dan bisa di-parse", 
   new vm.Script(bundle); // melempar bila sintaks rusak
 });
 
+test("bundle: tidak memakai innerHTML sama sekali (Trusted Types YouTube)", () => {
+  const bundle = buildBundle(pickerSrc, mainSrc);
+  assert.doesNotMatch(bundle, /\.innerHTML\s*=/);
+});
+
 test("bundle: nama top-level bentrok ditolak", () => {
   assert.throws(
     () => buildBundle("export const sama = 1;", "export const sama = 2;"),

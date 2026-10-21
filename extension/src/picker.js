@@ -231,23 +231,56 @@ function ensureStyles(doc) {
 }
 
 function buildPanel(doc, win, logger) {
-  const panel = doc.createElement("div");
+  // PENTING: panel dibangun 100% dengan DOM API, TANPA innerHTML.
+  // YouTube memberlakukan Trusted Types ("require-trusted-types"),
+  // sehingga assignment innerHTML dari halaman akan ditolak dengan
+  // "This document requires 'TrustedHTML' assignment". createElement
+  // + textContent tidak termasuk sink yang dibatasi.
+  const el = (tag, cls, text) => {
+    const node = doc.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  const actBtn = (ac, text) => {
+    const b = el("button", "ac-act", text);
+    b.type = "button";
+    b.setAttribute("data-ac", ac);
+    return b;
+  };
+  const field = (ac, placeholder) => {
+    const i = el("input");
+    i.type = "text";
+    i.setAttribute("data-ac", ac);
+    i.placeholder = placeholder;
+    return i;
+  };
+  const slot = (tag, cls, ac) => {
+    const n = el(tag, cls);
+    n.setAttribute("data-ac", ac);
+    return n;
+  };
+
+  const panel = el("div");
   panel.id = PANEL_ID;
-  panel.innerHTML = `
-    <div class="ac-head"><span>GIF — AunuCore youtube gift (phase test #3)</span>
-      <button type="button" class="ac-act" data-ac="close">Tutup</button></div>
-    <div class="ac-row">
-      <input type="text" data-ac="query" placeholder="Cari GIF (Tenor)… lalu Enter">
-      <button type="button" class="ac-act" data-ac="search">Cari</button>
-    </div>
-    <div class="ac-row">
-      <input type="text" data-ac="direct" placeholder="atau tempel URL .gif/.webp langsung">
-      <button type="button" class="ac-act" data-ac="use-direct">Pakai URL</button>
-    </div>
-    <div class="ac-status" data-ac="status"></div>
-    <div class="ac-grid" data-ac="grid"></div>
-    <div class="ac-selected" data-ac="selected"></div>
-  `;
+
+  const head = el("div", "ac-head");
+  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #3)"), actBtn("close", "Tutup"));
+
+  const rowSearch = el("div", "ac-row");
+  rowSearch.append(field("query", "Cari GIF (Tenor)… lalu Enter"), actBtn("search", "Cari"));
+
+  const rowDirect = el("div", "ac-row");
+  rowDirect.append(field("direct", "atau tempel URL .gif/.webp langsung"), actBtn("use-direct", "Pakai URL"));
+
+  panel.append(
+    head,
+    rowSearch,
+    rowDirect,
+    slot("div", "ac-status", "status"),
+    slot("div", "ac-grid", "grid"),
+    slot("div", "ac-selected", "selected"),
+  );
 
   const status = panel.querySelector('[data-ac="status"]');
   const grid = panel.querySelector('[data-ac="grid"]');
@@ -255,16 +288,33 @@ function buildPanel(doc, win, logger) {
   const queryInput = panel.querySelector('[data-ac="query"]');
 
   const renderSelected = () => {
+    // DOM API saja (tanpa innerHTML) — alasan Trusted Types seperti
+    // di buildPanel; juga judul GIF tidak lagi diinterpolasi mentah.
+    selectedBox.replaceChildren();
     const gif = pickerState.selected;
-    selectedBox.innerHTML = gif
-      ? `<img src="${gif.previewUrl}" alt=""><span>GIF terpilih: <b>${gif.title}</b> — tercatat sebagai pending GIF. Lampiran aktif di phase test #4.</span>
-         <button type="button" class="ac-act" data-ac="clear">Hapus</button>`
-      : "";
-    selectedBox.querySelector('[data-ac="clear"]')?.addEventListener("click", () => {
+    if (!gif) return;
+    const img = doc.createElement("img");
+    img.src = gif.previewUrl;
+    img.alt = "";
+    const label = doc.createElement("span");
+    const bold = doc.createElement("b");
+    bold.textContent = gif.title;
+    label.append(
+      doc.createTextNode("GIF terpilih: "),
+      bold,
+      doc.createTextNode(" — tercatat sebagai pending GIF. Lampiran aktif di phase test #4."),
+    );
+    const clearBtn = doc.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "ac-act";
+    clearBtn.setAttribute("data-ac", "clear");
+    clearBtn.textContent = "Hapus";
+    clearBtn.addEventListener("click", () => {
       clearSelectedGif(pickerState);
       win.dispatchEvent(new win.CustomEvent("aunucore:gif-cleared", { detail: null }));
       renderSelected();
     });
+    selectedBox.append(img, label, clearBtn);
   };
 
   const pick = (gif) => {
@@ -276,7 +326,7 @@ function buildPanel(doc, win, logger) {
   };
 
   const renderResults = (gifs) => {
-    grid.innerHTML = "";
+    grid.replaceChildren();
     for (const gif of gifs) {
       const img = doc.createElement("img");
       img.src = gif.previewUrl;
@@ -324,9 +374,18 @@ function findToolbar(commentBox) {
   );
 }
 
+// Kotak komentar kanonis: #simple-box hidup DI DALAM renderer
+// simplebox; memperlakukan keduanya sebagai box terpisah pernah
+// menghasilkan dua tombol GIF dalam satu kotak komentar.
+function canonicalCommentRoot(box) {
+  return box?.closest?.("ytd-comment-simplebox-renderer, ytd-commentbox-renderer") ?? box;
+}
+
 export function ensureGifButton(commentBox, { doc, win, logger = console } = {}) {
-  if (!commentBox || commentBox.querySelector(`[${BUTTON_MARK}]`)) return false;
-  const documentRef = doc ?? commentBox.ownerDocument;
+  if (!commentBox) return false;
+  const root = canonicalCommentRoot(commentBox);
+  if (root.querySelector(`[${BUTTON_MARK}]`)) return false;
+  const documentRef = doc ?? root.ownerDocument;
   const windowRef = win ?? documentRef.defaultView;
   ensureStyles(documentRef);
 
@@ -342,18 +401,20 @@ export function ensureGifButton(commentBox, { doc, win, logger = console } = {})
     const existing = documentRef.getElementById(PANEL_ID);
     if (existing) { existing.remove(); pickerState.isOpen = false; return; }
     const panel = buildPanel(documentRef, windowRef, logger);
-    commentBox.appendChild(panel);
+    root.appendChild(panel);
     pickerState.isOpen = true;
   });
 
-  findToolbar(commentBox).appendChild(btn);
+  findToolbar(root).appendChild(btn);
   return true;
 }
 
 export function scanAndInjectButtons({ doc = document, logger = console } = {}) {
   let added = 0;
+  // Hanya renderer kanonis. "#simple-box" sengaja TIDAK dicari
+  // terpisah: ia anak renderer simplebox (lihat canonicalCommentRoot).
   const boxes = doc.querySelectorAll(
-    "ytd-comment-simplebox-renderer, ytd-commentbox-renderer, #simple-box, ytd-engagement-panel-section-list-renderer ytd-comment-simplebox-renderer"
+    "ytd-comment-simplebox-renderer, ytd-commentbox-renderer"
   );
   boxes.forEach((box) => { if (ensureGifButton(box, { logger })) added++; });
   return added;
