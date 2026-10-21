@@ -1,5 +1,5 @@
 /**
- * Test untuk: AunuCore youtube gift (phase test #1)
+ * Test untuk: AunuCore youtube gift (phase test #2)
  * Jalankan: node --test extension/src/main.test.js
  * Setiap naik phase, update ekspektasi BUILD_NAME di test pertama.
  */
@@ -18,14 +18,16 @@ import {
   mockPayloadBefore,
   mockPayloadAfter,
   fetchTenorAsWebpBlob,
+  setPendingGif,
+  getPendingGif,
 } from "./main.js";
 
 test("nama build mengikuti pola phase test dan naik tiap percobaan", () => {
-  assert.equal(PHASE_TEST_NUMBER, 1);
-  assert.equal(BUILD_NAME, "AunuCore youtube gift (phase test #1)");
-  assert.equal(makePhaseTestName(2), "AunuCore youtube gift (phase test #2)");
-  assert.equal(nextPhaseTestName(1), "AunuCore youtube gift (phase test #2)");
-  assert.notEqual(makePhaseTestName(1), makePhaseTestName(2));
+  assert.equal(PHASE_TEST_NUMBER, 2);
+  assert.equal(BUILD_NAME, "AunuCore youtube gift (phase test #2)");
+  assert.equal(makePhaseTestName(3), "AunuCore youtube gift (phase test #3)");
+  assert.equal(nextPhaseTestName(2), "AunuCore youtube gift (phase test #3)");
+  assert.notEqual(makePhaseTestName(2), makePhaseTestName(3));
 });
 
 test("deteksi hanya endpoint create_comment", () => {
@@ -109,4 +111,15 @@ test("fetchTenorAsWebpBlob memakai encoder yang di-inject", async () => {
     convertGifToAnimatedWebp: fakeConvert,
   });
   assert.equal(out.type, "image/webp");
+});
+
+test("pending GIF dari picker tersimpan dan bisa dibersihkan", () => {
+  assert.equal(getPendingGif(), null);
+  const gif = { id: "1", gifUrl: "https://media.tenor.com/x.gif", title: "x" };
+  setPendingGif(gif);
+  assert.deepEqual(getPendingGif(), gif);
+  setPendingGif(null);
+  assert.equal(getPendingGif(), null);
+  setPendingGif({ title: "tanpa url" });
+  assert.equal(getPendingGif(), null);
 });

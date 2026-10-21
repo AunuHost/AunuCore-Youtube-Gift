@@ -1,5 +1,5 @@
 /**
- * AunuCore youtube gift (phase test #1)
+ * AunuCore youtube gift (phase test #2)
  * ============================================================
  * ATURAN PENAMAAN PERCOBAAN:
  * - Setiap percobaan WAJIB ganti nama dengan menaikkan angka di
@@ -23,11 +23,13 @@
  * ============================================================
  */
 
+import { initGifPicker, pickerState } from "./picker.js";
+
 // ---------------------------------------------------------------------------
 // 1. Identitas build / penamaan percobaan
 // ---------------------------------------------------------------------------
 
-export const PHASE_TEST_NUMBER = 1;
+export const PHASE_TEST_NUMBER = 2;
 export const BUILD_NAME_BASE = "AunuCore youtube gift";
 
 export function makePhaseTestName(phase = PHASE_TEST_NUMBER) {
@@ -148,6 +150,21 @@ export function transformCreateCommentPayload(payload, { encryptedBlobId } = {})
 }
 
 // ---------------------------------------------------------------------------
+// 3b. Pending GIF — GIF yang dipilih dari picker (phase test #2)
+// ---------------------------------------------------------------------------
+
+let pendingGif = null;
+
+export function setPendingGif(gif) {
+  pendingGif = gif?.gifUrl ? gif : null;
+  return pendingGif;
+}
+
+export function getPendingGif() {
+  return pendingGif;
+}
+
+// ---------------------------------------------------------------------------
 // 4. Ambil GIF Tenor -> animated WebP (encoder di-inject, bukan rename ekstensi)
 // ---------------------------------------------------------------------------
 
@@ -232,15 +249,17 @@ export function installFetchInterceptor(deps = {}) {
     }
 
     const tenorId = extractTenorId(parsed);
-    if (!tenorId && !("imageAttachment" in parsed)) {
+    const pending = getPendingGif();
+    if (!tenorId && !pending && !("imageAttachment" in parsed)) {
       return originalFetch(input, init); // bukan komentar GIF -> lolos apa adanya
     }
 
     let encryptedBlobId;
-    if (tenorId && typeof resolveEncryptedBlobId === "function") {
+    if ((tenorId || pending) && typeof resolveEncryptedBlobId === "function") {
       try {
         encryptedBlobId = await resolveEncryptedBlobId({
           tenorId,
+          pendingGif: pending,
           buildName: BUILD_NAME,
           originalPayload: parsed,
         });
@@ -254,15 +273,26 @@ export function installFetchInterceptor(deps = {}) {
     logger.debug?.(`${LOG_PREFIX} payload ditransformasi`, {
       tenorIdRemoved: tenorId !== undefined,
       hasImageAttachment: Boolean(nextPayload.imageAttachment),
+      pendingGifUrl: pending?.gifUrl ?? null,
     });
 
     // Kasus input berupa Request: buat Request baru dengan body baru.
+    let response;
     if (requestClone || (input && typeof input.clone === "function" && typeof init.body !== "string")) {
       const newRequest = new Request(input, { ...init, body: nextBody, method: "POST" });
-      return originalFetch(newRequest);
+      response = await originalFetch(newRequest);
+    } else {
+      response = await originalFetch(input, { ...init, body: nextBody });
     }
 
-    return originalFetch(input, { ...init, body: nextBody });
+    // Pending GIF terpakai untuk komentar ini — bersihkan bila terkirim.
+    if (response?.ok && pending) {
+      setPendingGif(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new window.CustomEvent("aunucore:gif-cleared", { detail: null }));
+      }
+    }
+    return response;
   };
 
   if (target === globalThis && typeof globalThis.fetch === "function") {
@@ -282,16 +312,28 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
   window.__AUNUCORE_YT_GIFT__ = {
     buildName: BUILD_NAME,
     phaseTestNumber: PHASE_TEST_NUMBER,
-    // SENGAJA tidak ada nextPhaseName di sini: field itu dulu berisi
-    // "phase test #2" dan membuat console seolah build ini sudah
-    // phase 2, padahal buildName/phaseTestNumber-nya masih #1.
+    // SENGAJA tidak ada field nama phase berikutnya di sini: field
+    // seperti itu pernah membuat console seolah build berjalan adalah
+    // phase lain. Objek ini hanya menyebut phase yang sedang aktif.
+    pickerState,
+    getPendingGif,
   };
 
+  // Picker (picker.js) mengumumkan GIF terpilih lewat CustomEvent.
+  window.addEventListener("aunucore:gif-selected", (e) => setPendingGif(e.detail));
+  window.addEventListener("aunucore:gif-cleared", () => setPendingGif(null));
+
+  try {
+    initGifPicker({});
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} picker gagal dipasang:`, err);
+  }
+
   installFetchInterceptor({
-    // TODO(phase berikutnya): ganti resolver ini dengan flow upload nyata.
-    // Untuk phase test #1 ia sengaja mengembalikan undefined, sehingga
-    // yang terverifikasi baru: tenorId terhapus & request tidak 400
-    // gara-gara tenorId. Attachment belum dikirim.
+    // TODO(phase test #3): ganti resolver ini dengan flow upload nyata.
+    // Di phase test #2 ia tetap mengembalikan undefined: yang baru di
+    // phase ini adalah tombol GIF + picker (picker.js) dan pending GIF.
+    // Attachment gambarnya sendiri belum dikirim sampai phase #3.
     resolveEncryptedBlobId: async () => undefined,
   });
 

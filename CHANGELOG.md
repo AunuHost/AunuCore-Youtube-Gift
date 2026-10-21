@@ -21,10 +21,10 @@ Optimizations / Known Issues / Experiments.
 ## [Unreleased] — menuju v1.0.0
 
 ### Rencana percobaan berikutnya
-- Phase test #2: capture 1x pengiriman komentar bergambar manual yang
+- Phase test #3: capture 1x pengiriman komentar bergambar manual yang
   berhasil (DevTools Network) untuk memetakan struktur persis
-  `imageAttachment` dan endpoint upload gambar YouTube.
-- Phase test #3: implementasi `resolveEncryptedBlobId` nyata
+  `imageAttachment` + endpoint upload, lalu implementasi
+  `resolveEncryptedBlobId` nyata
   (fetch Tenor -> encode animated WebP -> upload -> blob id).
 - Phase test #4: uji end-to-end kirim komentar GIF di desktop.
 
@@ -33,6 +33,61 @@ Optimizations / Known Issues / Experiments.
 - [ ] Tidak ada request yang gagal 400 gara-gara `tenorId`
 - [ ] Test suite hijau + uji manual terdokumentasi di changelog
 - [ ] README memuat cara install dari GitHub Release
+---
+
+## [0.2.0-phase-test.2] — 2026-10-21 — AunuCore youtube gift (phase test #2)
+
+Rilis percobaan kedua. Fokus phase ini: UI yang hilang di phase #1 —
+tombol GIF + panel picker, tersambung ke interceptor sebagai
+*pending GIF*.
+
+### Added
+- `extension/src/picker.js` — UI picker lengkap:
+  - Tombol **GIF** disisipkan ke kotak komentar YouTube desktop
+    (`ytd-comment-simplebox-renderer`), dijaga `MutationObserver`
+    agar muncul juga di kotak komentar yang dirender belakangan
+    (balasan, panel komentar, navigasi SPA).
+  - Panel picker: pencarian Tenor v2 (`search` / `featured`),
+    grid hasil 4 kolom, klik GIF untuk memilih.
+  - Mode **tempel URL langsung**: URL http/https berakhiran
+    `.gif`/`.webp` bisa dipakai tanpa API key.
+  - State pemilihan (`pickerState`) + CustomEvent
+    `aunucore:gif-selected` / `aunucore:gif-cleared`.
+  - Helper murni yang teruji: `buildTenorSearchUrl`,
+    `buildTenorFeaturedUrl`, `normalizeTenorResults`,
+    `isDirectGifUrl`, `gifFromDirectUrl`, `searchTenor`.
+- `extension/src/picker.test.js` — 7 test picker (total suite 17, lolos semua).
+- Integrasi di `main.js`: `setPendingGif` / `getPendingGif`;
+  interceptor sekarang juga terpicu oleh pending GIF (bukan hanya
+  `tenorId`), meneruskannya ke resolver, dan membersihkannya setelah
+  komentar terkirim (response OK). `pickerState` + `getPendingGif`
+  diekspos di `window.__AUNUCORE_YT_GIFT__` untuk inspeksi console.
+- `picker.js` didaftarkan sebagai web-accessible resource di kedua manifest.
+
+### Changed
+- Semua identitas build naik ke phase test #2: `PHASE_TEST_NUMBER`,
+  nama di kedua `manifest.json` (versi manifest `0.2.0`), loader, README.
+- Urutan peta jalan digeser: picker yang semula tidak terjadwal kini
+  menjadi phase #2 (karena tanpa UI tidak ada GIF yang bisa dipilih
+  untuk diuji); capture upload + resolver menjadi phase #3.
+
+### Fixed
+- Console menandai build sebagai "phase test #2" padahal yang berjalan
+  phase #1 (field `nextPhaseName` di `window.__AUNUCORE_YT_GIFT__`) —
+  field itu dihapus (commit `183357e`, di antara rilis #1 dan #2).
+
+### Experiments
+- Pencarian Tenor butuh API key pribadi; tanpa key, panel memberi
+  pesan jelas dan mode URL langsung tetap berfungsi penuh.
+
+### Known Issues
+- GIF terpilih **belum terlampir** ke komentar: resolver upload masih
+  `undefined` sampai phase #3. Komentar tetap terkirim sebagai teks,
+  pending GIF tercatat di console dan terpakai (dibersihkan).
+- Selector kotak komentar mengikuti struktur DOM YouTube saat ini;
+  perubahan DOM YouTube bisa memerlukan penyesuaian selector.
+- Tombol GIF dirancang untuk halaman watch desktop; tampilan
+  komentar Shorts memakai renderer berbeda dan belum dijamin.
 
 ---
 

@@ -50,6 +50,18 @@ Satu file, enam bagian:
    memasang interceptor + menaruh info build di
    `window.__AUNUCORE_YT_GIFT__`.
 
+### `extension/src/picker.js` — tombol GIF + panel picker (phase #2)
+Dua lapisan: (a) helper murni — URL builder Tenor v2, normalisasi
+hasil ke `{id, title, gifUrl, previewUrl}`, validasi URL langsung,
+dan state pemilihan; (b) UI browser — `ensureGifButton()` menyisipkan
+tombol **GIF** ke `ytd-comment-simplebox-renderer`,
+`initGifPicker()` memasang `MutationObserver` agar tombol muncul di
+kotak komentar yang dirender belakangan, dan panel picker (cari di
+Tenor bila API key terisi, atau tempel URL `.gif`/`.webp` langsung).
+GIF terpilih diumumkan lewat CustomEvent `aunucore:gif-selected`;
+`main.js` menyimpannya sebagai *pending GIF*. Di phase #2 GIF belum
+terlampir ke komentar — itu pekerjaan resolver di phase #3.
+
 ### `extension/src/loader.js` dan `root-loader.js`
 Content script kecil. Tugasnya menyuntikkan `main.js` sebagai
 `<script type="module">` ke halaman (MAIN world) — syarat agar
@@ -64,11 +76,14 @@ Manifest V3: nama `AunuCore youtube gift (phase test #1)`, versi
 permission YouTube + Tenor. Dua manifest disediakan supaya Load
 unpacked bisa memilih folder root ataupun folder `extension/`.
 
-### `extension/src/main.test.js`
-9 test: pola nama phase, deteksi endpoint, transformasi mock
-before -> after, penghapusan rekursif, payload asli tidak termutasi,
-penolakan blob id palsu, ekstraksi tenorId, dan kontrak
-`fetchTenorAsWebpBlob`. Jalankan: `node --test extension/src/main.test.js`.
+### `extension/src/main.test.js` dan `picker.test.js`
+Total 17 test. main: pola nama phase, deteksi endpoint, transformasi
+mock before -> after, penghapusan rekursif, payload asli tidak
+termutasi, penolakan blob id palsu, ekstraksi tenorId, pending GIF,
+kontrak `fetchTenorAsWebpBlob`. picker: URL builder Tenor,
+normalisasi hasil, validasi URL langsung, state pilih/bersihkan,
+dan kontrak `searchTenor`. Jalankan:
+`node --test extension/src/main.test.js extension/src/picker.test.js`.
 
 ### `README.md`, `CHANGELOG.md`, `docs/RELEASES.md`
 README = cara install + ringkasan. CHANGELOG = catatan percobaan,
@@ -85,3 +100,13 @@ perubahan, optimisasi per versi. RELEASES = aturan main rilis.
 | Attachment | Mock disebut saja | Hanya diisi bila blob id valid; mock khusus test |
 | Test | Contoh singkat | 9 test terverifikasi hijau |
 | Dokumentasi | Tidak ada | README + CHANGELOG + dokumen ini + RELEASES |
+
+## Apa yang berubah di phase test #2
+
+| Aspek | Phase test #1 | Phase test #2 |
+|---|---|---|
+| UI | Tidak ada sama sekali | Tombol GIF di kotak komentar + panel picker |
+| Sumber GIF | — | Pencarian Tenor v2 (perlu API key) + tempel URL langsung |
+| Kaitan UI <-> interceptor | — | Pending GIF via CustomEvent; interceptor terpicu & membersihkannya |
+| Label console | Ada field nama phase berikutnya (membingungkan) | Dihapus — console hanya menyebut phase aktif |
+| Test | 9 | 17 (tambah 7 picker + 1 pending GIF) |

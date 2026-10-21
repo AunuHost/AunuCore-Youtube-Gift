@@ -1,1 +1,33 @@
-{"content_scripts":[{"js":["root-loader.js"],"matches":["*://www.youtube.com/*"],"run_at":"document_start"}],"description":"AunuCore Youtube Gift — Desktop GIFs experiment for YouTube comments. Phase test #1: strip tenorId from create_comment requests.","host_permissions":["*://www.youtube.com/*","*://media.tenor.com/*","*://yt3.ggpht.com/*"],"manifest_version":3,"name":"AunuCore youtube gift (phase test #1)","version":"1.0.0","web_accessible_resources":[{"matches":["*://www.youtube.com/*"],"resources":["extension/src/main.js"]}]}
+{
+  "content_scripts": [
+    {
+      "js": [
+        "root-loader.js"
+      ],
+      "matches": [
+        "*://www.youtube.com/*"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #2: strip tenorId from create_comment requests.",
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "*://media.tenor.com/*",
+    "*://yt3.ggpht.com/*"
+  ],
+  "manifest_version": 3,
+  "name": "AunuCore youtube gift (phase test #2)",
+  "version": "0.2.0",
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "*://www.youtube.com/*"
+      ],
+      "resources": [
+        "extension/src/main.js",
+        "extension/src/picker.js"
+      ]
+    }
+  ]
+}

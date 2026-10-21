@@ -1,10 +1,10 @@
-// AunuCore youtube gift (phase test #1) - root loader
+// AunuCore youtube gift (phase test #2) - root loader
 // Dipakai jika folder yang dipilih di "Load unpacked" adalah folder
 // root repo/project (aunucore-youtube-gift), bukan folder extension/.
 // Fungsinya sama dengan extension/src/loader.js, hanya path main.js-nya
 // relatif dari root: extension/src/main.js
 (() => {
-  const BUILD_NAME = "AunuCore youtube gift (phase test #1)";
+  const BUILD_NAME = "AunuCore youtube gift (phase test #2)";
   try {
     const script = document.createElement("script");
     script.type = "module";
