@@ -1,5 +1,5 @@
 /**
- * Test picker untuk: AunuCore youtube gift (phase test #2)
+ * Test picker untuk: AunuCore youtube gift (phase test #3)
  * Jalankan: node --test extension/src/picker.test.js
  */
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
   selectGif,
   clearSelectedGif,
   searchTenor,
+  searchGifs,
 } from "./picker.js";
 
 test("buildTenorSearchUrl menyusun query Tenor v2 dengan benar", () => {
@@ -96,4 +97,22 @@ test("searchTenor memakai fetch yang di-inject dan menormalkan hasil", async () 
   const out = await searchTenor({ q: "tes", apiKey: "K", fetchImpl: fakeFetch });
   assert.equal(out.length, 1);
   assert.equal(out[0].id, "9");
+});
+
+test("searchGifs memprioritaskan bridgeSearch yang di-inject (jalur service worker)", async () => {
+  const out = await searchGifs({
+    q: "halo",
+    bridgeSearch: async (q) => [{ id: "b1", gifUrl: "https://media.tenor.com/b.gif", title: q }],
+  });
+  assert.equal(out[0].id, "b1");
+  assert.equal(out[0].title, "halo");
+});
+
+test("searchGifs memakai API key pribadi sebagai override langsung", async () => {
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({ results: [{ id: 5, title: "Langsung", media_formats: { gif: { url: "https://media.tenor.com/d.gif", dims: [10, 10] } } }] }),
+  });
+  const out = await searchGifs({ q: "langsung", apiKey: "KEY_PRIBADI", fetchImpl: fakeFetch });
+  assert.equal(out[0].id, "5");
 });

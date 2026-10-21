@@ -2,7 +2,8 @@
   "content_scripts": [
     {
       "js": [
-        "src/loader.js"
+        "src/loader.js",
+        "src/content-bridge.js"
       ],
       "matches": [
         "*://www.youtube.com/*"
@@ -10,15 +11,17 @@
       "run_at": "document_start"
     }
   ],
-  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #2: strip tenorId from create_comment requests.",
+  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #3: keyless Tenor search via service worker (Tenor site keys) + GIF picker.",
   "host_permissions": [
     "*://www.youtube.com/*",
     "*://media.tenor.com/*",
-    "*://yt3.ggpht.com/*"
+    "*://yt3.ggpht.com/*",
+    "*://tenor.com/*",
+    "*://tenor.googleapis.com/*"
   ],
   "manifest_version": 3,
-  "name": "AunuCore youtube gift (phase test #2)",
-  "version": "0.2.0",
+  "name": "AunuCore youtube gift (phase test #3)",
+  "version": "0.3.0",
   "web_accessible_resources": [
     {
       "matches": [
@@ -29,5 +32,12 @@
         "src/picker.js"
       ]
     }
-  ]
+  ],
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "src/sw.js",
+    "type": "module"
+  }
 }

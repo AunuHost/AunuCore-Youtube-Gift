@@ -1,17 +1,20 @@
 /**
- * AunuCore youtube gift (phase test #2) — GIF button + picker
+ * AunuCore youtube gift (phase test #3) — GIF button + picker
  * ============================================================
  * File ini menambah UI yang tidak ada di phase test #1:
  * 1) Tombol "GIF" yang disisipkan ke kotak komentar YouTube desktop
  *    (ytd-comment-simplebox-renderer).
- * 2) Panel picker: cari GIF di Tenor (butuh API key, lihat CONFIG),
- *    atau tempel URL GIF langsung (tidak butuh key) untuk memilih GIF.
+ * 2) Panel picker: cari GIF di Tenor TANPA API key pribadi — sejak
+ *    phase #3 pencarian berjalan lewat service worker (sw.js) yang
+ *    memakai key situs tenor.com sendiri, seperti ekstensi
+ *    desktop_gifs. Alternatif: tempel URL GIF langsung.
+ *    PICKER_CONFIG.tenorApiKey kini hanya override opsional developer.
  * 3) GIF terpilih disimpan di pickerState.selected dan diumumkan lewat
  *    CustomEvent "aunucore:gif-selected" — main.js mendengarkannya dan
  *    menyimpannya sebagai pendingGif untuk interceptor.
  *
- * BATAS PHASE #2: memilih GIF belum melampirkannya ke komentar.
- * Lampiran aktif setelah resolver upload (phase test #3) selesai.
+ * BATAS SAAT INI: memilih GIF belum melampirkannya ke komentar.
+ * Lampiran aktif setelah resolver upload (phase test #4) selesai.
  * ============================================================
  */
 
@@ -102,6 +105,59 @@ export function gifFromDirectUrl(value) {
 }
 
 // ---------------------------------------------------------------------------
+// Pencarian lewat service worker (jalur utama sejak phase #3)
+// ---------------------------------------------------------------------------
+
+let bridgeSeq = 0;
+
+export function requestViaBridge({ type, query = "", win, timeoutMs = 12000 } = {}) {
+  const windowRef = win ?? (typeof window !== "undefined" ? window : null);
+  if (!windowRef?.postMessage || !windowRef?.addEventListener) {
+    return Promise.reject(new Error("Bridge tidak tersedia di konteks ini"));
+  }
+  const requestId = `ac-${Date.now()}-${++bridgeSeq}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Service worker tidak menjawab (timeout) — coba reload ekstensi"));
+    }, timeoutMs);
+    const onMessage = (event) => {
+      const data = event.data;
+      if (!data || data.source !== "aunucore-bridge" || data.type !== "RESULT" || data.requestId !== requestId) return;
+      cleanup();
+      if (data.ok) resolve(Array.isArray(data.gifs) ? data.gifs : []);
+      else reject(new Error(data.error ?? "Pencarian gagal"));
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      windowRef.removeEventListener("message", onMessage);
+    };
+    windowRef.addEventListener("message", onMessage);
+    windowRef.postMessage(
+      { source: "aunucore-main", type, requestId, query },
+      windowRef.location?.origin ?? "*",
+    );
+  });
+}
+
+export async function browserBridgeSearch(query) {
+  return requestViaBridge({ type: query ? "SEARCH" : "FEATURED", query });
+}
+
+/**
+ * Pencarian GIF untuk UI. Urutan jalur:
+ * 1) bridgeSearch yang di-inject (test / pemanggil khusus)
+ * 2) API key pribadi bila developer mengisinya (override langsung)
+ * 3) service worker via bridge (key situs tenor.com) — jalur normal
+ */
+export async function searchGifs({ q, apiKey, fetchImpl, bridgeSearch } = {}) {
+  if (typeof bridgeSearch === "function") return bridgeSearch(q ?? "");
+  const key = resolveTenorApiKey({ tenorApiKey: apiKey });
+  if (key) return searchTenor({ q, apiKey: key, fetchImpl });
+  return browserBridgeSearch(q ?? "");
+}
+
+// ---------------------------------------------------------------------------
 // State pemilihan GIF
 // ---------------------------------------------------------------------------
 
@@ -178,7 +234,7 @@ function buildPanel(doc, win, logger) {
   const panel = doc.createElement("div");
   panel.id = PANEL_ID;
   panel.innerHTML = `
-    <div class="ac-head"><span>GIF — AunuCore youtube gift (phase test #2)</span>
+    <div class="ac-head"><span>GIF — AunuCore youtube gift (phase test #3)</span>
       <button type="button" class="ac-act" data-ac="close">Tutup</button></div>
     <div class="ac-row">
       <input type="text" data-ac="query" placeholder="Cari GIF (Tenor)… lalu Enter">
@@ -201,7 +257,7 @@ function buildPanel(doc, win, logger) {
   const renderSelected = () => {
     const gif = pickerState.selected;
     selectedBox.innerHTML = gif
-      ? `<img src="${gif.previewUrl}" alt=""><span>GIF terpilih: <b>${gif.title}</b> — tercatat sebagai pending GIF. Lampiran aktif di phase test #3.</span>
+      ? `<img src="${gif.previewUrl}" alt=""><span>GIF terpilih: <b>${gif.title}</b> — tercatat sebagai pending GIF. Lampiran aktif di phase test #4.</span>
          <button type="button" class="ac-act" data-ac="clear">Hapus</button>`
       : "";
     selectedBox.querySelector('[data-ac="clear"]')?.addEventListener("click", () => {
@@ -216,7 +272,7 @@ function buildPanel(doc, win, logger) {
     win.dispatchEvent(new win.CustomEvent("aunucore:gif-selected", { detail: gif }));
     status.textContent = `Terpilih: ${gif.title}`;
     renderSelected();
-    logger.info?.(`[AunuCore youtube gift (phase test #2)] GIF terpilih`, gif);
+    logger.info?.(`[AunuCore youtube gift (phase test #3)] GIF terpilih`, gif);
   };
 
   const renderResults = (gifs) => {
@@ -236,13 +292,11 @@ function buildPanel(doc, win, logger) {
   const doSearch = async () => {
     status.textContent = "Mencari…";
     try {
-      const gifs = await searchTenor({ q: queryInput.value.trim() });
+      const gifs = await searchGifs({ q: queryInput.value.trim() });
       pickerState.results = gifs;
       renderResults(gifs);
     } catch (err) {
-      status.textContent = err.code === "NO_API_KEY"
-        ? "Pencarian Tenor butuh API key (isi PICKER_CONFIG.tenorApiKey di picker.js). Sementara pakai mode tempel URL di bawahnya."
-        : `Gagal mencari: ${err.message}`;
+      status.textContent = `Gagal mencari: ${err.message} — mode tempel URL tetap bisa dipakai.`;
     }
   };
 
@@ -281,7 +335,7 @@ export function ensureGifButton(commentBox, { doc, win, logger = console } = {})
   btn.className = "aunucore-gif-btn";
   btn.setAttribute(BUTTON_MARK, "1");
   btn.textContent = "GIF";
-  btn.title = "AunuCore youtube gift (phase test #2) — pilih GIF";
+  btn.title = "AunuCore youtube gift (phase test #3) — pilih GIF";
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -310,6 +364,6 @@ export function initGifPicker({ win = window, doc = document, logger = console }
   scanAndInjectButtons({ doc, logger });
   const observer = new win.MutationObserver(() => scanAndInjectButtons({ doc, logger }));
   observer.observe(doc.documentElement, { childList: true, subtree: true });
-  logger.info?.("[AunuCore youtube gift (phase test #2)] tombol GIF + picker aktif");
+  logger.info?.("[AunuCore youtube gift (phase test #3)] tombol GIF + picker aktif");
   return () => observer.disconnect();
 }

@@ -1,5 +1,5 @@
 /**
- * AunuCore youtube gift (phase test #2)
+ * AunuCore youtube gift (phase test #3)
  * ============================================================
  * ATURAN PENAMAAN PERCOBAAN:
  * - Setiap percobaan WAJIB ganti nama dengan menaikkan angka di
@@ -29,7 +29,7 @@ import { initGifPicker, pickerState } from "./picker.js";
 // 1. Identitas build / penamaan percobaan
 // ---------------------------------------------------------------------------
 
-export const PHASE_TEST_NUMBER = 2;
+export const PHASE_TEST_NUMBER = 3;
 export const BUILD_NAME_BASE = "AunuCore youtube gift";
 
 export function makePhaseTestName(phase = PHASE_TEST_NUMBER) {
@@ -330,10 +330,10 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
   }
 
   installFetchInterceptor({
-    // TODO(phase test #3): ganti resolver ini dengan flow upload nyata.
-    // Di phase test #2 ia tetap mengembalikan undefined: yang baru di
-    // phase ini adalah tombol GIF + picker (picker.js) dan pending GIF.
-    // Attachment gambarnya sendiri belum dikirim sampai phase #3.
+    // TODO(phase test #4): ganti resolver ini dengan flow upload nyata.
+    // Di phase test #3 ia tetap mengembalikan undefined: yang baru di
+    // phase ini adalah pencarian Tenor tanpa API key pribadi lewat
+    // service worker (sw.js). Attachment belum dikirim sampai #4.
     resolveEncryptedBlobId: async () => undefined,
   });
 

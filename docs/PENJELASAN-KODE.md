@@ -62,6 +62,22 @@ GIF terpilih diumumkan lewat CustomEvent `aunucore:gif-selected`;
 `main.js` menyimpannya sebagai *pending GIF*. Di phase #2 GIF belum
 terlampir ke komentar — itu pekerjaan resolver di phase #3.
 
+### `extension/src/sw.js` — service worker Tenor (phase #3)
+Satu-satunya bagian yang bicara ke Tenor. Ia mengambil key yang
+tenor.com sematkan untuk script situsnya sendiri
+(`API_V2_KEY`/`API_V2_CLIENT_KEY` di `<script id="data">`, base64
+JSON), menyimpannya di `chrome.storage.local`, lalu memanggil API
+Tenor v2 dengan filter rating G. Key yang ditolak dibuang dan
+dipanen ulang; API yang gagal total digantikan data
+`<script id="store-cache">` dari halaman Tenor. Pola ini dipelajari
+dari ekstensi desktop_gifs (rayytor) dan ditulis ulang di sini.
+
+### `extension/src/content-bridge.js` — jembatan picker <-> service worker
+Picker berjalan di MAIN world dan tidak bisa menyentuh
+`chrome.runtime`; bridge (content script isolated world) meneruskan
+permintaan pencarian lewat `window.postMessage` ke
+`chrome.runtime.sendMessage`, lalu mengembalikan hasilnya.
+
 ### `extension/src/loader.js` dan `root-loader.js`
 Content script kecil. Tugasnya menyuntikkan `main.js` sebagai
 `<script type="module">` ke halaman (MAIN world) — syarat agar
@@ -77,13 +93,15 @@ permission YouTube + Tenor. Dua manifest disediakan supaya Load
 unpacked bisa memilih folder root ataupun folder `extension/`.
 
 ### `extension/src/main.test.js` dan `picker.test.js`
-Total 17 test. main: pola nama phase, deteksi endpoint, transformasi
+Total 26 test. main: pola nama phase, deteksi endpoint, transformasi
 mock before -> after, penghapusan rekursif, payload asli tidak
 termutasi, penolakan blob id palsu, ekstraksi tenorId, pending GIF,
 kontrak `fetchTenorAsWebpBlob`. picker: URL builder Tenor,
 normalisasi hasil, validasi URL langsung, state pilih/bersihkan,
-dan kontrak `searchTenor`. Jalankan:
-`node --test extension/src/main.test.js extension/src/picker.test.js`.
+dan kontrak `searchTenor`, plus jalur bridge `searchGifs`. sw:
+ekstraksi key dari HTML tenor.com, store-cache, normalisasi,
+panen->API, retry key basi, dan fallback halaman. Jalankan:
+`node --test extension/src/main.test.js extension/src/picker.test.js extension/src/sw.test.js`.
 
 ### `README.md`, `CHANGELOG.md`, `docs/RELEASES.md`
 README = cara install + ringkasan. CHANGELOG = catatan percobaan,
@@ -110,3 +128,13 @@ perubahan, optimisasi per versi. RELEASES = aturan main rilis.
 | Kaitan UI <-> interceptor | — | Pending GIF via CustomEvent; interceptor terpicu & membersihkannya |
 | Label console | Ada field nama phase berikutnya (membingungkan) | Dihapus — console hanya menyebut phase aktif |
 | Test | 9 | 17 (tambah 7 picker + 1 pending GIF) |
+
+## Apa yang berubah di phase test #3
+
+| Aspek | Phase test #2 | Phase test #3 |
+|---|---|---|
+| Pencarian Tenor | Butuh API key pribadi pengguna | Tanpa key pribadi: key situs tenor.com dipanen service worker |
+| Arsitektur jaringan | Picker fetch langsung dari halaman | Service worker khusus Tenor + content bridge |
+| Key mati/ditolak | — | Dibuang, panen ulang otomatis, retry sekali |
+| API Tenor gagal | Pencarian gagal | Fallback ke data store-cache halaman Tenor |
+| Test | 17 | 26 |

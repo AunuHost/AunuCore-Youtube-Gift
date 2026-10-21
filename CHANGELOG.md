@@ -21,18 +21,71 @@ Optimizations / Known Issues / Experiments.
 ## [Unreleased] — menuju v1.0.0
 
 ### Rencana percobaan berikutnya
-- Phase test #3: capture 1x pengiriman komentar bergambar manual yang
+- Phase test #4: capture 1x pengiriman komentar bergambar manual yang
   berhasil (DevTools Network) untuk memetakan struktur persis
   `imageAttachment` + endpoint upload, lalu implementasi
   `resolveEncryptedBlobId` nyata
-  (fetch Tenor -> encode animated WebP -> upload -> blob id).
-- Phase test #4: uji end-to-end kirim komentar GIF di desktop.
+  (fetch Tenor -> encode animated WebP -> upload -> blob id),
+  ditutup uji end-to-end kirim komentar GIF di desktop.
 
 ### Kriteria lolos v1.0.0 (real release)
 - [ ] Komentar dengan GIF terkirim dan lampirannya tampil di YouTube desktop
 - [ ] Tidak ada request yang gagal 400 gara-gara `tenorId`
 - [ ] Test suite hijau + uji manual terdokumentasi di changelog
-- [ ] README memuat cara install dari GitHub Release
+- [ ] README memuat cara install dari GitHub Release---
+
+## [0.3.0-phase-test.3] — 2026-10-21 — AunuCore youtube gift (phase test #3)
+
+Rilis percobaan ketiga. Fokus: pencarian Tenor di picker tidak lagi
+membutuhkan API key pribadi, dengan mempelajari dan menerapkan pola
+ekstensi desktop_gifs (rayytor/desktop_gifs).
+
+### Added
+- `extension/src/sw.js` — service worker khusus Tenor:
+  - Mengambil key situs tenor.com (`API_V2_KEY` + `API_V2_CLIENT_KEY`)
+    dari elemen `<script id="data">` (base64 JSON) di halaman
+    tenor.com — key yang sama yang dipakai script situs Tenor sendiri.
+  - Key disimpan di `chrome.storage.local`; pencarian berikutnya
+    memakai key simpanan tanpa mengambil tenor.com lagi.
+  - Panggilan API `tenor.googleapis.com/v2` dengan
+    `contentfilter=high` (rating G) + `media_filter=tinygif,tinywebp,gif`.
+  - Key ditolak (400/401/403) -> dibuang, panen ulang dari tenor.com,
+    panggil ulang sekali.
+  - API gagal total -> fallback ke data `<script id="store-cache">`
+    yang disematkan Tenor di halaman featured/pencariannya.
+  - Filter hasil: ID numerik, bukan sticker/static, rating G di jalur API.
+- `extension/src/content-bridge.js` — jembatan `postMessage` antara
+  picker (MAIN world, tak bisa akses `chrome.runtime`) dan service
+  worker (`chrome.runtime.sendMessage`).
+- `extension/src/sw.test.js` — 7 test service worker
+  (total suite 26, semua lolos).
+- Manifest: `background.service_worker` (module), permission
+  `storage`, host permission `tenor.com` + `tenor.googleapis.com`,
+  content script bridge di kedua manifest.
+
+### Changed
+- `searchGifs()` di picker: jalur utama kini lewat bridge ke service
+  worker; API key pribadi turun peran menjadi override developer saja.
+- Panel picker tidak lagi menampilkan pesan "butuh API key".
+- Identitas build naik ke phase test #3 di semua file identitas
+  (manifest versi `0.3.0`).
+- Peta jalan digeser: phase #3 yang semula direncanakan untuk
+  resolver upload kini dipakai untuk keyless search (keputusan Aunu:
+  jalur Tenor dinilai stabil); resolver upload menjadi phase #4.
+
+### Experiments
+- Pola panen key situs dipelajari dari `extension/src/sw.js` milik
+  rayytor/desktop_gifs, lalu ditulis ulang sesuai arsitektur repo ini
+  (ES module + dependency injection agar teruji), bukan salinan.
+
+### Known Issues
+- Jalur key situs bergantung pada format halaman tenor.com; bila
+  Tenor mengubah format `<script id="data">` / `store-cache`,
+  pencarian bisa mati dan picker menampilkan error dari service worker.
+- Service worker berbentuk ES module (Chrome). Dukungan Firefox
+  (background scripts klasik) belum ditangani.
+- GIF terpilih tetap belum terlampir ke komentar (resolver = phase #4).
+
 ---
 
 ## [0.2.0-phase-test.2] — 2026-10-21 — AunuCore youtube gift (phase test #2)

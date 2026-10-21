@@ -37,6 +37,6 @@
 |---|---|---|
 | `v0.1.0-phase-test.1` | Rilis percobaan #1 | Interceptor + strip `tenorId`, manifest + loader, 9 test |
 | `v0.2.0-phase-test.2` | Rilis percobaan #2 | Tombol GIF + panel picker Tenor/URL langsung, pending GIF, 17 test |
-| `v0.3.0-phase-test.3` | Direncanakan | Capture struktur `imageAttachment` + endpoint upload, `resolveEncryptedBlobId` nyata + encoder animated WebP |
-| `v0.4.0-phase-test.4` | Direncanakan | Uji end-to-end kirim komentar GIF |
+| `v0.3.0-phase-test.3` | Rilis percobaan #3 | Pencarian Tenor tanpa API key pribadi: service worker panen key situs tenor.com + fallback store-cache, 26 test |
+| `v0.4.0-phase-test.4` | Direncanakan | Capture struktur `imageAttachment` + endpoint upload, `resolveEncryptedBlobId` nyata + encoder animated WebP, uji end-to-end |
 | `v1.0.0` | Target real release | Rangkuman semua percobaan & optimisasi |
