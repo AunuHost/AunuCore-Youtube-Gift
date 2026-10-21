@@ -1,18 +1,20 @@
 // AunuCore youtube gift (phase test #3) - root loader
 // Dipakai jika folder yang dipilih di "Load unpacked" adalah folder
 // root repo/project (aunucore-youtube-gift), bukan folder extension/.
-// Fungsinya sama dengan extension/src/loader.js, hanya path main.js-nya
-// relatif dari root: extension/src/main.js
+// Isinya sama dengan extension/src/loader.js: meminta service worker
+// menyuntikkan main.bundle.js ke MAIN world via chrome.scripting.
+// (Tag <script src="chrome-extension://"> dari halaman dibuang karena
+// memicu error Blink "Unsafe attempt to load URL" di sebagian frame.)
 (() => {
   const BUILD_NAME = "AunuCore youtube gift (phase test #3)";
   try {
-    const script = document.createElement("script");
-    script.type = "module";
-    script.src = chrome.runtime.getURL("extension/src/main.js");
-    script.dataset.buildName = BUILD_NAME;
-    script.addEventListener("load", () => script.remove());
-    (document.head || document.documentElement).appendChild(script);
-    console.info(`[${BUILD_NAME}] root-loader: main.js disuntikkan`);
+    chrome.runtime.sendMessage({ type: "aunucore:inject-main" }).then(
+      (res) => {
+        if (res?.ok) console.info(`[${BUILD_NAME}] root-loader: ${res.bundle} disuntikkan via service worker`);
+        else console.error(`[${BUILD_NAME}] root-loader: injeksi gagal:`, res?.error ?? "tanpa jawaban");
+      },
+      (err) => console.error(`[${BUILD_NAME}] root-loader: service worker tidak menjawab:`, err),
+    );
   } catch (err) {
     console.error(`[${BUILD_NAME}] root-loader gagal:`, err);
   }

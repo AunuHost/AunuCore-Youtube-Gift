@@ -22,19 +22,9 @@
   "manifest_version": 3,
   "name": "AunuCore youtube gift (phase test #3)",
   "version": "0.3.0",
-  "web_accessible_resources": [
-    {
-      "matches": [
-        "*://www.youtube.com/*"
-      ],
-      "resources": [
-        "src/main.js",
-        "src/picker.js"
-      ]
-    }
-  ],
   "permissions": [
-    "storage"
+    "storage",
+    "scripting"
   ],
   "background": {
     "service_worker": "src/sw.js",

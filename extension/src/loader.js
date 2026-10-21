@@ -1,19 +1,23 @@
 // AunuCore youtube gift (phase test #3) - loader
-// Content script (isolated world). Tugasnya hanya satu: menyuntikkan
-// src/main.js sebagai <script type="module"> ke konteks halaman (MAIN world),
-// karena hanya di sana window.fetch milik YouTube bisa di-intercept.
-// main.js memakai sintaks ES module (export), jadi TIDAK boleh dimuat
-// langsung sebagai content script klasik - lewat loader ini aman.
+// Content script (isolated world). Tugasnya hanya meminta service
+// worker menyuntikkan main.bundle.js ke MAIN world lewat
+// chrome.scripting.executeScript.
+//
+// Cara lama (tag <script src="chrome-extension://..."> dari halaman)
+// DIBUANG: Blink menolak muatan itu di sebagian frame dengan error
+// "Unsafe attempt to load URL ... Domains, protocols and ports must
+// match". File yang disuntikkan chrome.scripting bukan muatan
+// halaman, jadi tidak terkena penolakan tersebut.
 (() => {
   const BUILD_NAME = "AunuCore youtube gift (phase test #3)";
   try {
-    const script = document.createElement("script");
-    script.type = "module";
-    script.src = chrome.runtime.getURL("src/main.js");
-    script.dataset.buildName = BUILD_NAME;
-    script.addEventListener("load", () => script.remove());
-    (document.head || document.documentElement).appendChild(script);
-    console.info(`[${BUILD_NAME}] loader: main.js disuntikkan`);
+    chrome.runtime.sendMessage({ type: "aunucore:inject-main" }).then(
+      (res) => {
+        if (res?.ok) console.info(`[${BUILD_NAME}] loader: ${res.bundle} disuntikkan via service worker`);
+        else console.error(`[${BUILD_NAME}] loader: injeksi gagal:`, res?.error ?? "tanpa jawaban");
+      },
+      (err) => console.error(`[${BUILD_NAME}] loader: service worker tidak menjawab:`, err),
+    );
   } catch (err) {
     console.error(`[${BUILD_NAME}] loader gagal:`, err);
   }

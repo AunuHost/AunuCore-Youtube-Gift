@@ -35,6 +35,9 @@ extension/
     sw.js         # service worker: Tenor key harvest + API + fallback
     sw.test.js    # node --test suite for sw.js (7 tests)
     content-bridge.js # MAIN-world picker <-> service worker bridge
+    main.bundle.js  # GENERATED bundle (picker+main) injected via chrome.scripting
+tools/
+  build-bundle.mjs  # builds main.bundle.js — run after editing picker/main
     loader.js     # injects main.js as a module into the YouTube page
 manifest.json     # root manifest (Load unpacked from repo root)
 root-loader.js    # loader used by the root manifest
@@ -85,7 +88,8 @@ See `docs/RELEASES.md` and `CHANGELOG.md`.
 ## Run tests
 
 ```bash
-node --test extension/src/main.test.js extension/src/picker.test.js extension/src/sw.test.js
+node --test extension/src/*.test.js
+node tools/build-bundle.mjs   # rebuild bundle after editing picker.js / main.js
 ```
 
 Phase test #1 verified: `tenorId` is stripped and the request no

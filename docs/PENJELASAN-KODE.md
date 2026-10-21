@@ -78,6 +78,16 @@ Picker berjalan di MAIN world dan tidak bisa menyentuh
 permintaan pencarian lewat `window.postMessage` ke
 `chrome.runtime.sendMessage`, lalu mengembalikan hasilnya.
 
+### Injeksi ke halaman (diperbaiki di phase #3)
+`main.js` tidak lagi dimuat halaman lewat tag
+`<script src="chrome-extension://…">` — cara itu ditolak Blink di
+sebagian frame ("Unsafe attempt to load URL … must match").
+Sekarang: loader (content script) meminta service worker, dan
+service worker menyuntikkan `main.bundle.js` (gabungan picker+main
+yang dibangun `tools/build-bundle.mjs` menjadi skrip klasik) lewat
+`chrome.scripting.executeScript` di MAIN world. Konsekuensinya
+`web_accessible_resources` tidak diperlukan dan dihapus.
+
 ### `extension/src/loader.js` dan `root-loader.js`
 Content script kecil. Tugasnya menyuntikkan `main.js` sebagai
 `<script type="module">` ke halaman (MAIN world) — syarat agar

@@ -195,12 +195,73 @@ export async function handleTenorMessage(msg, client) {
   throw new Error(`Unknown message type: ${String(msg.type)}`);
 }
 
+// ---------------------------------------------------------------------------
+// Injeksi main.bundle.js ke MAIN world (pengganti <script src="chrome-extension://">)
+// ---------------------------------------------------------------------------
+// Memuat file ekstensi lewat tag script dari halaman memicu error Blink
+// "Unsafe attempt to load URL ... Domains, protocols and ports must
+// match" di sebagian frame. chrome.scripting.executeScript menyuntikkan
+// file sebagai ekstensi (bukan muatan halaman), jadi jalur itu aman.
+
+export function layoutPaths(swPathname = "/src/sw.js") {
+  const clean = String(swPathname).replace(/^\//, "");
+  const dir = clean.slice(0, clean.lastIndexOf("/") + 1); // "src/" atau "extension/src/"
+  return {
+    bundle: `${dir}main.bundle.js`,
+    bridge: `${dir}content-bridge.js`,
+    // Loader di layout extension/ adalah src/loader.js; di layout root
+    // repo ia berada di root sebagai root-loader.js.
+    loader: dir === "src/" ? "src/loader.js" : "root-loader.js",
+  };
+}
+
+export async function injectMainBundle(sender, { scripting, swPathname } = {}) {
+  const paths = layoutPaths(swPathname ?? "/src/sw.js");
+  const api = scripting ?? (typeof chrome !== "undefined" ? chrome.scripting : undefined);
+  if (!api?.executeScript) throw new Error("chrome.scripting tidak tersedia");
+  const tabId = sender?.tab?.id;
+  if (typeof tabId !== "number") throw new Error("Pengirim pesan tidak punya tab");
+  await api.executeScript({
+    target: { tabId, frameIds: [sender?.frameId ?? 0] },
+    files: [paths.bundle],
+    world: "MAIN",
+  });
+  return paths.bundle;
+}
+
 // Wiring browser (tidak jalan di Node test).
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   const client = createTenorClient({});
+  const swPathname = self.location?.pathname ?? "/src/sw.js";
+  const paths = layoutPaths(swPathname);
+
+  // Tab YouTube yang sudah terbuka saat ekstensi di-install/update tidak
+  // menjalankan content script baru; suntikkan loader + bridge ke sana,
+  // loader lalu meminta bundle seperti biasa.
+  chrome.runtime.onInstalled?.addListener(async () => {
+    try {
+      const tabs = await chrome.tabs.query({ url: "https://www.youtube.com/*", discarded: false });
+      await Promise.all(tabs.map(async ({ id }) => {
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: id }, files: [paths.loader] });
+          await chrome.scripting.executeScript({ target: { tabId: id }, files: [paths.bridge] });
+        } catch { /* tab tertutup/navigasi — akan dapat script saat load berikutnya */ }
+      }));
+    } catch { /* abaikan */ }
+  });
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || typeof msg.type !== "string" || !msg.type.startsWith("aunucore:")) return false;
     if (sender.id !== chrome.runtime.id) return false;
+
+    if (msg.type === "aunucore:inject-main") {
+      injectMainBundle(sender, { swPathname }).then(
+        (bundle) => sendResponse({ ok: true, bundle }),
+        (err) => sendResponse({ ok: false, error: String(err?.message ?? err) }),
+      );
+      return true;
+    }
+
     handleTenorMessage(msg, client).then(
       (gifs) => sendResponse({ ok: true, gifs }),
       (err) => sendResponse({ ok: false, error: String(err?.message ?? err) }),
