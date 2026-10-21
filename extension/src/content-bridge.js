@@ -1,4 +1,4 @@
-// AunuCore youtube gift (phase test #4) — content bridge
+// AunuCore youtube gift (phase test #5) — content bridge
 // Content script (isolated world). Jembatan antara:
 //   picker.js (jalan di MAIN world, tidak punya akses chrome.runtime)
 //   <-> sw.js service worker (yang bicara ke Tenor)
@@ -6,7 +6,7 @@
 //   masuk : { source: "aunucore-main",   type: "SEARCH"|"FEATURED", requestId, query }
 //   keluar: { source: "aunucore-bridge", type: "RESULT", requestId, ok, gifs?, error? }
 (() => {
-  const BUILD_NAME = "AunuCore youtube gift (phase test #4)";
+  const BUILD_NAME = "AunuCore youtube gift (phase test #5)";
   window.addEventListener("message", async (event) => {
     if (event.source !== window) return;
     const data = event.data;

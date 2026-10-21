@@ -1,17 +1,26 @@
 {
   "content_scripts": [
     {
-      "js": [
-        "root-loader.js",
-        "extension/src/content-bridge.js"
-      ],
       "matches": [
         "*://www.youtube.com/*"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "js": [
+        "extension/src/content-bridge.js"
+      ]
+    },
+    {
+      "matches": [
+        "*://www.youtube.com/*"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "js": [
+        "extension/src/main.bundle.js"
+      ]
     }
   ],
-  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #4: selected Tenor GIF is attached as tenorId with automatic retries against intermittent 400 blocks; keyless Tenor search via service worker.",
+  "description": "AunuCore Youtube Gift \u2014 Desktop GIFs experiment for YouTube comments. Phase test #5: bundle runs as a MAIN-world content script at document_start (persistent fetch hook, live detection); Tenor GIF attached as tenorId with automatic retries; keyless Tenor search via service worker.",
   "host_permissions": [
     "*://www.youtube.com/*",
     "*://media.tenor.com/*",
@@ -20,8 +29,8 @@
     "*://tenor.googleapis.com/*"
   ],
   "manifest_version": 3,
-  "name": "AunuCore youtube gift (phase test #4)",
-  "version": "0.4.0",
+  "name": "AunuCore youtube gift (phase test #5)",
+  "version": "0.5.0",
   "permissions": [
     "storage",
     "scripting"

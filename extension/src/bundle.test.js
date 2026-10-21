@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 import { buildBundle } from "../../tools/build-bundle.mjs";
-import { layoutPaths, injectMainBundle } from "./sw.js";
+import { layoutPaths, injectTabScripts } from "./sw.js";
 
 const pickerSrc = readFileSync(new URL("./picker.js", import.meta.url), "utf8");
 const mainSrc = readFileSync(new URL("./main.js", import.meta.url), "utf8");
@@ -38,26 +38,34 @@ test("layoutPaths membedakan layout root repo vs folder extension", () => {
   assert.deepEqual(layoutPaths("/extension/src/sw.js"), {
     bundle: "extension/src/main.bundle.js",
     bridge: "extension/src/content-bridge.js",
-    loader: "root-loader.js",
   });
   assert.deepEqual(layoutPaths("/src/sw.js"), {
     bundle: "src/main.bundle.js",
     bridge: "src/content-bridge.js",
-    loader: "src/loader.js",
   });
 });
 
-test("injectMainBundle memanggil chrome.scripting ke tab+frame pengirim, world MAIN", async () => {
+test("injectTabScripts (fallback tab lama): bridge isolated dulu, bundle MAIN world", async () => {
   const calls = [];
   const fakeScripting = { executeScript: async (arg) => { calls.push(arg); } };
-  const used = await injectMainBundle(
-    { tab: { id: 42 }, frameId: 0 },
-    { scripting: fakeScripting, swPathname: "/extension/src/sw.js" },
-  );
-  assert.equal(used, "extension/src/main.bundle.js");
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].files, ["extension/src/main.bundle.js"]);
-  assert.equal(calls[0].world, "MAIN");
-  assert.equal(calls[0].target.tabId, 42);
-  assert.deepEqual(calls[0].target.frameIds, [0]);
+  const paths = await injectTabScripts(42, { scripting: fakeScripting, swPathname: "/extension/src/sw.js" });
+  assert.equal(paths.bundle, "extension/src/main.bundle.js");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].files, ["extension/src/content-bridge.js"]);
+  assert.equal(calls[0].world, undefined);
+  assert.deepEqual(calls[1].files, ["extension/src/main.bundle.js"]);
+  assert.equal(calls[1].world, "MAIN");
+  assert.equal(calls[1].target.tabId, 42);
+});
+
+test("kedua manifest mendaftarkan bundle sebagai content script MAIN world di document_start", () => {
+  for (const mf of ["../../manifest.json", "../manifest.json"]) {
+    const m = JSON.parse(readFileSync(new URL(mf, import.meta.url), "utf8"));
+    const mainEntry = m.content_scripts.find((e) => e.world === "MAIN");
+    assert.ok(mainEntry, `${mf}: entri MAIN world harus ada`);
+    assert.equal(mainEntry.run_at, "document_start");
+    assert.ok(mainEntry.js.some((f) => f.endsWith("main.bundle.js")));
+    const allJs = m.content_scripts.flatMap((e) => e.js).join(" ");
+    assert.doesNotMatch(allJs, /loader/);
+  }
 });

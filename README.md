@@ -2,7 +2,7 @@
 
 Desktop GIFs experiment for YouTube desktop comments — workaround research for issue #93.
 
-**Current build: AunuCore youtube gift (phase test #4)**
+**Current build: AunuCore youtube gift (phase test #5)**
 
 Since 14 October 2026, YouTube rejects the `tenorId` field on desktop
 `comment/create_comment` requests with `400 INVALID_ARGUMENT`.

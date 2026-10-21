@@ -158,3 +158,12 @@ perubahan, optimisasi per versi. RELEASES = aturan main rilis.
 | Umpan balik | tidak ada | event `aunucore:gif-post-result` → status panel (`messageForPostResult`) |
 | Pending GIF | tanpa batas waktu | TTL 3 menit; dibersihkan hanya bila `posted`/`gif` |
 | Kode lama | `stripTenorDeep`, `buildImageAttachment`, stub WebP | dihapus — premis upload WebP gugur setelah studi source desktop_gifs |
+
+## Apa yang berubah di phase test #5
+
+| Aspek | Phase test #4 | Phase test #5 |
+|---|---|---|
+| Cara bundle masuk halaman | loader (isolated) → pesan ke SW → `chrome.scripting` | content script manifest `world: "MAIN"`, `document_start` — sebelum script YouTube |
+| Wrapper `fetch` | ditempel per salinan bundle; bisa bertumpuk | satu slot persisten `Symbol.for("aunucore.ytgift.hook")`, delegasi ke handler terbaru, salinan lama dipensiunkan via teardown |
+| Klaim "interceptor aktif" | dicetak tanpa syarat | disertai status live: `(hook live)` / `(hook BELUM live)` + peringatan refresh di console dan panel |
+| Loader | `loader.js` / `root-loader.js` | dihapus; SW hanya fallback tab lama |

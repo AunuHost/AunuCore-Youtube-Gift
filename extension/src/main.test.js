@@ -1,5 +1,5 @@
 /**
- * Test untuk: AunuCore youtube gift (phase test #4)
+ * Test untuk: AunuCore youtube gift (phase test #5)
  * Jalankan: node --test extension/src/main.test.js
  * Setiap naik phase, update ekspektasi BUILD_NAME di test pertama.
  */
@@ -24,6 +24,7 @@ import {
   classifyCommentResponse,
   collectShowErrorMessages,
   installFetchInterceptor,
+  getHookLive,
   setPendingGif,
   getPendingGif,
 } from "./main.js";
@@ -46,47 +47,38 @@ function fakeResponse({ status = 200, json = null } = {}) {
 const BLOCKED = () => fakeResponse({ status: 400, json: { error: { status: "INVALID_ARGUMENT", message: "bad" } } });
 const POSTED = () => fakeResponse({ status: 200, json: { actionResult: { status: "STATUS_SUCCEEDED" } } });
 
-// installFetchInterceptor menempelkan diri ke globalThis.fetch;
-// harness ini memasangnya dengan fetch palsu lalu MEMULIHKAN fetch
-// asli Node apa pun hasil testnya.
-async function withInterceptor(deps, fn) {
-  const realFetch = globalThis.fetch;
-  const uninstall = installFetchInterceptor(deps);
-  try {
-    return await fn(globalThis.fetch);
-  } finally {
-    uninstall();
-    globalThis.fetch = realFetch;
-  }
+// Harness phase test #5: interceptor tinggal di slot hook pada
+// window palsu; transport adalah fetch "asli" window itu.
+function makeFakeWindow(transport, readyState = "complete") {
+  return { fetch: transport, document: { readyState } };
 }
 
 async function runInterceptor(responses, { gif = GIF } = {}) {
   const calls = [];
   const results = [];
-  setPendingGif(gif);
-  const fetchImpl = async (input, init) => {
+  const transport = async (input, init) => {
     calls.push(init?.body ?? null);
     return responses[Math.min(calls.length - 1, responses.length - 1)];
   };
+  const win = makeFakeWindow(transport);
+  setPendingGif(gif);
+  installFetchInterceptor({
+    win,
+    sleep: async () => {},
+    retryDelaysMs: [1, 1],
+    logger: { info() {}, warn() {}, debug() {} },
+    onResult: (d) => results.push(d),
+  });
   const body = JSON.stringify({ commentText: "halo", createCommentParams: "Eg0" });
-  const res = await withInterceptor(
-    {
-      fetchImpl,
-      sleep: async () => {},
-      retryDelaysMs: [1, 1],
-      logger: { info() {}, warn() {}, debug() {} },
-      onResult: (d) => results.push(d),
-    },
-    (fetch) => fetch(CREATE_URL, { method: "POST", body }),
-  );
-  return { calls, results, res };
+  const res = await win.fetch(CREATE_URL, { method: "POST", body });
+  return { calls, results, res, win };
 }
 
 test("nama build mengikuti pola phase test dan naik tiap percobaan", () => {
-  assert.equal(PHASE_TEST_NUMBER, 4);
-  assert.equal(BUILD_NAME, "AunuCore youtube gift (phase test #4)");
-  assert.equal(makePhaseTestName(5), "AunuCore youtube gift (phase test #5)");
-  assert.equal(nextPhaseTestName(4), "AunuCore youtube gift (phase test #5)");
+  assert.equal(PHASE_TEST_NUMBER, 5);
+  assert.equal(BUILD_NAME, "AunuCore youtube gift (phase test #5)");
+  assert.equal(makePhaseTestName(6), "AunuCore youtube gift (phase test #6)");
+  assert.equal(nextPhaseTestName(5), "AunuCore youtube gift (phase test #6)");
 });
 
 test("deteksi hanya endpoint create_comment", () => {
@@ -189,15 +181,42 @@ test("interceptor: blocked terus -> berhenti di batas retry, pending dipertahank
 test("interceptor: tanpa pending GIF, request lolos utuh tanpa diubah", async () => {
   setPendingGif(null);
   let seen = null;
+  const win = makeFakeWindow(async (input, init) => { seen = init?.body; return POSTED(); });
+  installFetchInterceptor({
+    win,
+    sleep: async () => {},
+    logger: { info() {}, warn() {}, debug() {} },
+    onResult: () => assert.fail("tidak boleh ada hasil untuk komentar non-GIF"),
+  });
   const body = JSON.stringify({ commentText: "teks biasa" });
-  await withInterceptor(
-    {
-      fetchImpl: async (input, init) => { seen = init?.body; return POSTED(); },
-      sleep: async () => {},
-      logger: { info() {}, warn() {}, debug() {} },
-      onResult: () => assert.fail("tidak boleh ada hasil untuk komentar non-GIF"),
-    },
-    (fetch) => fetch(CREATE_URL, { method: "POST", body }),
-  );
+  await win.fetch(CREATE_URL, { method: "POST", body });
   assert.equal(seen, body);
+});
+
+test("hook: salinan kedua mempensiunkan salinan pertama; request diproses sekali", async () => {
+  let transportCalls = 0;
+  let teardowns = 0;
+  const win = makeFakeWindow(async () => { transportCalls++; return POSTED(); });
+  const quiet = { info() {}, warn() {}, debug() {} };
+  installFetchInterceptor({ win, logger: quiet, teardown: () => { teardowns++; } });
+  installFetchInterceptor({ win, logger: quiet, sleep: async () => {}, onResult: () => {} });
+  assert.equal(teardowns, 1);
+  setPendingGif(GIF);
+  await win.fetch(CREATE_URL, { method: "POST", body: JSON.stringify({ commentText: "x" }) });
+  assert.equal(transportCalls, 1); // bukan 2 tumpukan interceptor
+  setPendingGif(null);
+});
+
+test("hook live: false bila terpasang terlambat, true setelah request youtubei lewat wrapper", async () => {
+  const win = makeFakeWindow(async () => POSTED(), "complete");
+  installFetchInterceptor({ win, logger: { info() {}, warn() {}, debug() {} } });
+  assert.equal(getHookLive(win), false);
+  await win.fetch("https://www.youtube.com/youtubei/v1/browse?key=x", { method: "POST", body: "{}" });
+  assert.equal(getHookLive(win), true);
+});
+
+test("hook live: langsung true bila terpasang saat document_start (readyState loading)", () => {
+  const win = makeFakeWindow(async () => POSTED(), "loading");
+  installFetchInterceptor({ win, logger: { info() {}, warn() {}, debug() {} } });
+  assert.equal(getHookLive(win), true);
 });

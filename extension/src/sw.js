@@ -1,5 +1,5 @@
 /**
- * AunuCore youtube gift (phase test #4) — Tenor service worker
+ * AunuCore youtube gift (phase test #5) — Tenor service worker
  * ============================================================
  * Satu-satunya bagian ekstensi yang bicara ke Tenor, meniru pola
  * yang dipakai ekstensi desktop_gifs (rayytor):
@@ -209,42 +209,40 @@ export function layoutPaths(swPathname = "/src/sw.js") {
   return {
     bundle: `${dir}main.bundle.js`,
     bridge: `${dir}content-bridge.js`,
-    // Loader di layout extension/ adalah src/loader.js; di layout root
-    // repo ia berada di root sebagai root-loader.js.
-    loader: dir === "src/" ? "src/loader.js" : "root-loader.js",
   };
 }
 
-export async function injectMainBundle(sender, { scripting, swPathname } = {}) {
+// Sejak phase test #5 bundle didaftarkan langsung di manifest
+// sebagai content script MAIN world (document_start). Fungsi ini
+// hanya FALLBACK untuk tab YouTube yang sudah terbuka saat
+// ekstensi di-install/update: suntikkan bridge (isolated) lalu
+// bundle (MAIN). Hook di bundle akan melaporkan dirinya belum
+// live di tab seperti itu — user cukup refresh.
+export async function injectTabScripts(tabId, { scripting, swPathname } = {}) {
   const paths = layoutPaths(swPathname ?? "/src/sw.js");
   const api = scripting ?? (typeof chrome !== "undefined" ? chrome.scripting : undefined);
   if (!api?.executeScript) throw new Error("chrome.scripting tidak tersedia");
-  const tabId = sender?.tab?.id;
-  if (typeof tabId !== "number") throw new Error("Pengirim pesan tidak punya tab");
-  await api.executeScript({
-    target: { tabId, frameIds: [sender?.frameId ?? 0] },
-    files: [paths.bundle],
-    world: "MAIN",
-  });
-  return paths.bundle;
+  if (typeof tabId !== "number") throw new Error("tabId tidak valid");
+  await api.executeScript({ target: { tabId }, files: [paths.bridge] });
+  await api.executeScript({ target: { tabId }, files: [paths.bundle], world: "MAIN" });
+  return paths;
 }
 
 // Wiring browser (tidak jalan di Node test).
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   const client = createTenorClient({});
   const swPathname = self.location?.pathname ?? "/src/sw.js";
-  const paths = layoutPaths(swPathname);
 
   // Tab YouTube yang sudah terbuka saat ekstensi di-install/update tidak
-  // menjalankan content script baru; suntikkan loader + bridge ke sana,
-  // loader lalu meminta bundle seperti biasa.
+  // menjalankan content script manifest yang baru; suntikkan bridge +
+  // bundle ke sana sebagai fallback (hook akan menandai dirinya belum
+  // live di tab itu sampai user refresh).
   chrome.runtime.onInstalled?.addListener(async () => {
     try {
       const tabs = await chrome.tabs.query({ url: "https://www.youtube.com/*", discarded: false });
       await Promise.all(tabs.map(async ({ id }) => {
         try {
-          await chrome.scripting.executeScript({ target: { tabId: id }, files: [paths.loader] });
-          await chrome.scripting.executeScript({ target: { tabId: id }, files: [paths.bridge] });
+          await injectTabScripts(id, { swPathname });
         } catch { /* tab tertutup/navigasi — akan dapat script saat load berikutnya */ }
       }));
     } catch { /* abaikan */ }
@@ -253,14 +251,6 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || typeof msg.type !== "string" || !msg.type.startsWith("aunucore:")) return false;
     if (sender.id !== chrome.runtime.id) return false;
-
-    if (msg.type === "aunucore:inject-main") {
-      injectMainBundle(sender, { swPathname }).then(
-        (bundle) => sendResponse({ ok: true, bundle }),
-        (err) => sendResponse({ ok: false, error: String(err?.message ?? err) }),
-      );
-      return true;
-    }
 
     handleTenorMessage(msg, client).then(
       (gifs) => sendResponse({ ok: true, gifs }),

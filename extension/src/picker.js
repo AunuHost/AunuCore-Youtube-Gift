@@ -1,5 +1,5 @@
 /**
- * AunuCore youtube gift (phase test #4) — GIF button + picker
+ * AunuCore youtube gift (phase test #5) — GIF button + picker
  * ============================================================
  * File ini menambah UI yang tidak ada di phase test #1:
  * 1) Tombol "GIF" yang disisipkan ke kotak komentar YouTube desktop
@@ -14,7 +14,7 @@
  *    menyimpannya sebagai pendingGif untuk interceptor.
  *
  * BATAS SAAT INI: memilih GIF belum melampirkannya ke komentar.
- * Lampiran aktif setelah resolver upload (phase test #4) selesai.
+ * Lampiran aktif setelah resolver upload (phase test #5) selesai.
  * ============================================================
  */
 
@@ -165,7 +165,7 @@ export function createPickerState() {
   return { selected: null, isOpen: false, lastQuery: "", results: [], lastPostResult: null };
 }
 
-/** Ubah putusan interceptor (phase test #4) menjadi teks status panel. */
+/** Ubah putusan interceptor (phase test #5) menjadi teks status panel. */
 export function messageForPostResult(detail) {
   if (!detail) return "";
   switch (detail.kind) {
@@ -284,7 +284,7 @@ function buildPanel(doc, win, logger) {
   panel.id = PANEL_ID;
 
   const head = el("div", "ac-head");
-  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #4)"), actBtn("close", "Tutup"));
+  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #5)"), actBtn("close", "Tutup"));
 
   const rowSearch = el("div", "ac-row");
   rowSearch.append(field("query", "Cari GIF (Tenor)… lalu Enter"), actBtn("search", "Cari"));
@@ -341,7 +341,7 @@ function buildPanel(doc, win, logger) {
     win.dispatchEvent(new win.CustomEvent("aunucore:gif-selected", { detail: gif }));
     status.textContent = `Terpilih: ${gif.title}`;
     renderSelected();
-    logger.info?.(`[AunuCore youtube gift (phase test #4)] GIF terpilih`, gif);
+    logger.info?.(`[AunuCore youtube gift (phase test #5)] GIF terpilih`, gif);
   };
 
   const renderResults = (gifs) => {
@@ -379,6 +379,14 @@ function buildPanel(doc, win, logger) {
     pick(gif);
   });
 
+  // Peringatan jujur (phase test #5): bila hook pengiriman belum
+  // live di tab ini (tab termuat sebelum ekstensi aktif), GIF tidak
+  // akan terkirim sampai tab di-refresh. Jangan berpura-pura aktif.
+  if (win?.__AUNUCORE_YT_GIFT__ && win.__AUNUCORE_YT_GIFT__.hookLive === false) {
+    status.textContent =
+      "Hook pengiriman belum live di tab ini — refresh halaman ini dulu, lalu pilih GIF lagi.";
+  }
+
   renderSelected();
   return panel;
 }
@@ -413,7 +421,7 @@ export function ensureGifButton(commentBox, { doc, win, logger = console } = {})
   btn.className = "aunucore-gif-btn";
   btn.setAttribute(BUTTON_MARK, "1");
   btn.textContent = "GIF";
-  btn.title = "AunuCore youtube gift (phase test #4) — pilih GIF";
+  btn.title = "AunuCore youtube gift (phase test #5) — pilih GIF";
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -452,7 +460,7 @@ export function initGifPicker({ win = window, doc = document, logger = console }
     if (status) status.textContent = messageForPostResult(e.detail);
   };
   win.addEventListener("aunucore:gif-post-result", onPostResult);
-  logger.info?.("[AunuCore youtube gift (phase test #4)] tombol GIF + picker aktif");
+  logger.info?.("[AunuCore youtube gift (phase test #5)] tombol GIF + picker aktif");
   return () => {
     observer.disconnect();
     win.removeEventListener("aunucore:gif-post-result", onPostResult);

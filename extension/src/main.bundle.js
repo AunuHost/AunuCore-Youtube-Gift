@@ -4,7 +4,7 @@
 (() => {
 "use strict";
 /**
- * AunuCore youtube gift (phase test #4) — GIF button + picker
+ * AunuCore youtube gift (phase test #5) — GIF button + picker
  * ============================================================
  * File ini menambah UI yang tidak ada di phase test #1:
  * 1) Tombol "GIF" yang disisipkan ke kotak komentar YouTube desktop
@@ -19,7 +19,7 @@
  *    menyimpannya sebagai pendingGif untuk interceptor.
  *
  * BATAS SAAT INI: memilih GIF belum melampirkannya ke komentar.
- * Lampiran aktif setelah resolver upload (phase test #4) selesai.
+ * Lampiran aktif setelah resolver upload (phase test #5) selesai.
  * ============================================================
  */
 
@@ -170,7 +170,7 @@ function createPickerState() {
   return { selected: null, isOpen: false, lastQuery: "", results: [], lastPostResult: null };
 }
 
-/** Ubah putusan interceptor (phase test #4) menjadi teks status panel. */
+/** Ubah putusan interceptor (phase test #5) menjadi teks status panel. */
 function messageForPostResult(detail) {
   if (!detail) return "";
   switch (detail.kind) {
@@ -289,7 +289,7 @@ function buildPanel(doc, win, logger) {
   panel.id = PANEL_ID;
 
   const head = el("div", "ac-head");
-  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #4)"), actBtn("close", "Tutup"));
+  head.append(el("span", null, "GIF — AunuCore youtube gift (phase test #5)"), actBtn("close", "Tutup"));
 
   const rowSearch = el("div", "ac-row");
   rowSearch.append(field("query", "Cari GIF (Tenor)… lalu Enter"), actBtn("search", "Cari"));
@@ -346,7 +346,7 @@ function buildPanel(doc, win, logger) {
     win.dispatchEvent(new win.CustomEvent("aunucore:gif-selected", { detail: gif }));
     status.textContent = `Terpilih: ${gif.title}`;
     renderSelected();
-    logger.info?.(`[AunuCore youtube gift (phase test #4)] GIF terpilih`, gif);
+    logger.info?.(`[AunuCore youtube gift (phase test #5)] GIF terpilih`, gif);
   };
 
   const renderResults = (gifs) => {
@@ -384,6 +384,14 @@ function buildPanel(doc, win, logger) {
     pick(gif);
   });
 
+  // Peringatan jujur (phase test #5): bila hook pengiriman belum
+  // live di tab ini (tab termuat sebelum ekstensi aktif), GIF tidak
+  // akan terkirim sampai tab di-refresh. Jangan berpura-pura aktif.
+  if (win?.__AUNUCORE_YT_GIFT__ && win.__AUNUCORE_YT_GIFT__.hookLive === false) {
+    status.textContent =
+      "Hook pengiriman belum live di tab ini — refresh halaman ini dulu, lalu pilih GIF lagi.";
+  }
+
   renderSelected();
   return panel;
 }
@@ -418,7 +426,7 @@ function ensureGifButton(commentBox, { doc, win, logger = console } = {}) {
   btn.className = "aunucore-gif-btn";
   btn.setAttribute(BUTTON_MARK, "1");
   btn.textContent = "GIF";
-  btn.title = "AunuCore youtube gift (phase test #4) — pilih GIF";
+  btn.title = "AunuCore youtube gift (phase test #5) — pilih GIF";
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -457,7 +465,7 @@ function initGifPicker({ win = window, doc = document, logger = console } = {}) 
     if (status) status.textContent = messageForPostResult(e.detail);
   };
   win.addEventListener("aunucore:gif-post-result", onPostResult);
-  logger.info?.("[AunuCore youtube gift (phase test #4)] tombol GIF + picker aktif");
+  logger.info?.("[AunuCore youtube gift (phase test #5)] tombol GIF + picker aktif");
   return () => {
     observer.disconnect();
     win.removeEventListener("aunucore:gif-post-result", onPostResult);
@@ -502,7 +510,7 @@ function initGifPicker({ win = window, doc = document, logger = console } = {}) 
 // 1. Identitas build / penamaan percobaan
 // ---------------------------------------------------------------------------
 
-const PHASE_TEST_NUMBER = 4;
+const PHASE_TEST_NUMBER = 5;
 const BUILD_NAME_BASE = "AunuCore youtube gift";
 
 function makePhaseTestName(phase = PHASE_TEST_NUMBER) {
@@ -712,19 +720,75 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // 5. Fetch interceptor (side-effect browser saja)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 5b. Hook persisten pada window.fetch (phase test #5)
+// ---------------------------------------------------------------------------
+// Wrapper dipasang SEKALI pada window.fetch dan mendelegasikan ke
+// handler terbaru (slot.current). Salinan bundle yang lebih baru
+// mempensiunkan handler lama lewat teardown-nya — satu halaman tidak
+// pernah punya dua interceptor bertumpuk dengan state terpisah.
+//
+// Kenapa perlu: di phase test #4 terbukti request create_comment
+// lolos sebagai fetch 200 biasa dari script YouTube (200.js) tanpa
+// pernah menyentuh wrapper — bundle tiba (lewat putaran service
+// worker) SETELAH modul YouTube memegang referensi fetch asli.
+// Karena itu bundle kini didaftarkan sebagai content script
+// MAIN world di document_start dari manifest: terpasang sebelum
+// kode YouTube mana pun. Slot ini menjaga jalur fallback untuk
+// tab yang sudah terbuka saat ekstensi di-install/update.
+//
+// slot.live: true bila terpasang saat document_start (readyState
+// "loading"), atau setelah ada request /youtubei/v1/ yang terbukti
+// melewati wrapper. Di luar itu hook dianggap belum live.
+
+const HOOK_KEY = Symbol.for("aunucore.ytgift.hook");
+const YOUTUBEI_RE = /\/youtubei\/v1\//;
+
+function ensureHookSlot(win, fetchImpl) {
+  if (!win || (typeof win !== "object" && typeof win !== "function")) return null;
+  const existing = win[HOOK_KEY];
+  if (existing) return existing;
+  const originalFetch =
+    fetchImpl ?? (typeof win.fetch === "function" ? win.fetch.bind(win) : undefined);
+  if (typeof originalFetch !== "function") return null;
+  const slot = {
+    current: null,
+    live: win.document?.readyState === "loading",
+    originalFetch,
+  };
+  Object.defineProperty(win, HOOK_KEY, { value: slot });
+  win.fetch = function (...args) {
+    const s = win[HOOK_KEY];
+    try {
+      if (YOUTUBEI_RE.test(getRequestUrl(args[0]))) s.live = true;
+    } catch { /* abaikan */ }
+    return s.current ? s.current.fetch(...args) : s.originalFetch(...args);
+  };
+  return slot;
+}
+
+function getHookLive(win) {
+  return Boolean(win?.[HOOK_KEY]?.live);
+}
+
 /**
  * @param {object} deps
+ * @param {object}   [deps.win]           window target (default: window global)
  * @param {Function} [deps.fetchImpl]     fetch asli (untuk test/injeksi)
  * @param {object}   [deps.logger]        default: console
  * @param {Function} [deps.sleep]         penunda antar-retry (test: instan)
  * @param {number[]} [deps.retryDelaysMs] jadwal retry (default RETRY_DELAYS_MS)
  * @param {Function} [deps.onResult]      callback hasil akhir komentar GIF
+ * @param {Function} [deps.teardown]      dipanggil bila salinan yang
+ *   lebih baru mengambil alih hook (membersihkan listener/observer
+ *   milik salinan ini)
  * @returns {Function} uninstall()
  */
 function installFetchInterceptor(deps = {}) {
-  const target = deps.target ?? globalThis;
-  const originalFetch = deps.fetchImpl ?? target.fetch?.bind(target);
-  if (typeof originalFetch !== "function") return () => {};
+  const win = deps.win ?? (typeof window !== "undefined" ? window : globalThis);
+  const slot = ensureHookSlot(win, deps.fetchImpl);
+  if (!slot) return () => {};
+  const originalFetch = slot.originalFetch;
 
   const logger = deps.logger ?? console;
   const sleep = deps.sleep ?? defaultSleep;
@@ -734,9 +798,9 @@ function installFetchInterceptor(deps = {}) {
     if (typeof deps.onResult === "function") {
       try { deps.onResult(detail); } catch { /* abaikan */ }
     }
-    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    if (win && typeof win.dispatchEvent === "function" && typeof win.CustomEvent === "function") {
       try {
-        window.dispatchEvent(new window.CustomEvent("aunucore:gif-post-result", { detail }));
+        win.dispatchEvent(new win.CustomEvent("aunucore:gif-post-result", { detail }));
       } catch { /* abaikan */ }
     }
     if (detail.kind !== "posted") {
@@ -834,19 +898,21 @@ function installFetchInterceptor(deps = {}) {
     // pending dipertahankan (dalam TTL) agar user bisa mencoba lagi.
     if (pending && (verdict.kind === "posted" || verdict.kind === "gif")) {
       setPendingGif(null);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new window.CustomEvent("aunucore:gif-cleared", { detail: null }));
+      if (win && typeof win.dispatchEvent === "function" && typeof win.CustomEvent === "function") {
+        win.dispatchEvent(new win.CustomEvent("aunucore:gif-cleared", { detail: null }));
       }
     }
     return response;
   };
 
-  if (target === globalThis && typeof globalThis.fetch === "function") {
-    globalThis.fetch = interceptedFetch;
-  }
+  // Pensiunkan handler salinan sebelumnya, lalu daftarkan diri
+  // sebagai handler aktif pada slot bersama.
+  try { slot.current?.teardown?.(); } catch { /* abaikan */ }
+  const handler = { fetch: interceptedFetch, teardown: deps.teardown };
+  slot.current = handler;
 
   return function uninstall() {
-    if (globalThis.fetch === interceptedFetch) globalThis.fetch = originalFetch;
+    if (slot.current === handler) slot.current = null;
   };
 }
 
@@ -863,22 +929,45 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
     // phase lain. Objek ini hanya menyebut phase yang sedang aktif.
     pickerState,
     getPendingGif,
+    get hookLive() { return getHookLive(window); },
   };
 
   // Picker (picker.js) mengumumkan GIF terpilih lewat CustomEvent.
-  window.addEventListener("aunucore:gif-selected", (e) => setPendingGif(e.detail));
-  window.addEventListener("aunucore:gif-cleared", () => setPendingGif(null));
+  const onGifSelected = (e) => setPendingGif(e.detail);
+  const onGifCleared = () => setPendingGif(null);
+  window.addEventListener("aunucore:gif-selected", onGifSelected);
+  window.addEventListener("aunucore:gif-cleared", onGifCleared);
 
+  let teardownPicker = () => {};
   try {
-    initGifPicker({});
+    teardownPicker = initGifPicker({}) || (() => {});
   } catch (err) {
     console.warn(`${LOG_PREFIX} picker gagal dipasang:`, err);
   }
 
-  // Phase test #4: interceptor memasang tenorId GIF terpilih dan
-  // me-retry penolakan "blocked" sampai 12x (lihat RETRY_DELAYS_MS).
-  installFetchInterceptor({});
+  // Phase test #5: interceptor kini tinggal di slot hook persisten
+  // (lihat ensureHookSlot). Bila salinan bundle yang lebih baru
+  // masuk ke halaman yang sama, teardown ini membersihkan listener
+  // dan observer milik salinan ini.
+  installFetchInterceptor({
+    win: window,
+    teardown: () => {
+      window.removeEventListener("aunucore:gif-selected", onGifSelected);
+      window.removeEventListener("aunucore:gif-cleared", onGifCleared);
+      teardownPicker();
+    },
+  });
 
-  console.info(`${LOG_PREFIX} interceptor aktif di`, location.href);
+  const live = getHookLive(window);
+  console.info(
+    `${LOG_PREFIX} interceptor aktif di`,
+    location.href,
+    live ? "(hook live)" : "(hook BELUM live)",
+  );
+  if (!live) {
+    console.warn(
+      `${LOG_PREFIX} hook terpasang setelah halaman termuat — refresh tab ini agar pengiriman GIF bekerja`,
+    );
+  }
 }
 })();
